@@ -144,23 +144,33 @@
       liveHistory.download = [...liveHistory.download.slice(1), data.download_speed];
       liveHistory.upload = [...liveHistory.upload.slice(1), data.upload_speed];
 
-      // If active app has any activity, log it to the live map
+      // Log all active process speeds to the live map concurrently
       if (period === "live") {
-        const app = liveActiveApp;
-
         // Reset instantaneous current speed across all processes
         for (const key in liveProcessMap) {
           liveProcessMap[key].current_down = 0;
           liveProcessMap[key].current_up = 0;
         }
 
+        // Aggregate speeds for each active process reported by backend
+        if (data.process_speeds) {
+          data.process_speeds.forEach(p => {
+            const app = p.name;
+            if (!liveProcessMap[app]) {
+              liveProcessMap[app] = { download: 0, upload: 0, time: 0, current_down: 0, current_up: 0 };
+            }
+            liveProcessMap[app].download += p.download_speed;
+            liveProcessMap[app].upload += p.upload_speed;
+            liveProcessMap[app].current_down = p.download_speed;
+            liveProcessMap[app].current_up = p.upload_speed;
+          });
+        }
+
+        // Increment screen time for the actual active foreground app
+        const app = liveActiveApp;
         if (!liveProcessMap[app]) {
           liveProcessMap[app] = { download: 0, upload: 0, time: 0, current_down: 0, current_up: 0 };
         }
-        liveProcessMap[app].download += data.download_speed;
-        liveProcessMap[app].upload += data.upload_speed;
-        liveProcessMap[app].current_down = data.download_speed;
-        liveProcessMap[app].current_up = data.upload_speed;
         liveProcessMap[app].time += 1;
 
         // Force Svelte 5 reactivity refresh for liveProcessMap updates

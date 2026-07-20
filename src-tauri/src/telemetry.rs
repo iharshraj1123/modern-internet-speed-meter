@@ -16,10 +16,17 @@ static SELF_EXE_NAME: Lazy<String> = Lazy::new(|| {
 use windows::Win32::Foundation::CloseHandle;
 use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
-use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
-use windows::Win32::System::ProcessStatus::GetModuleFileNameExW;
+use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, GetProcessIoCounters, IO_COUNTERS};
+use windows::Win32::System::ProcessStatus::{GetModuleFileNameExW, EnumProcesses};
 use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
 use windows::Win32::NetworkManagement::IpHelper::{GetIfTable2, FreeMibTable, MIB_IF_TABLE2};
+
+#[derive(serde::Serialize, Clone, Debug)]
+pub struct ProcessSpeed {
+    pub name: String,
+    pub download_speed: u64,
+    pub upload_speed: u64,
+}
 
 // Telemetry state that will be updated in real-time
 #[derive(serde::Serialize, Clone, Debug)]
@@ -30,6 +37,7 @@ pub struct RealtimeStats {
     pub is_charging: bool,
     pub active_app: String,
     pub ping_ms: u32,         // Latency in milliseconds (0 = offline)
+    pub process_speeds: Vec<ProcessSpeed>,
 }
 
 // Local accumulator for process telemetry
@@ -132,6 +140,62 @@ fn measure_ping() -> u32 {
     }
 }
 
+struct ProcessIoSnapshot {
+    pid: u32,
+    name: String,
+    read_bytes: u64,
+    write_bytes: u64,
+}
+
+fn get_all_processes_io() -> Vec<ProcessIoSnapshot> {
+    let mut result = Vec::new();
+    unsafe {
+        let mut pids = [0u32; 1024];
+        let mut cb_needed = 0u32;
+        if EnumProcesses(
+            pids.as_mut_ptr(),
+            std::mem::size_of_val(&pids) as u32,
+            &mut cb_needed,
+        ).is_ok() {
+            let count = (cb_needed as usize / std::mem::size_of::<u32>()).min(1024);
+            for &pid in &pids[..count] {
+                if pid == 0 {
+                    continue;
+                }
+                let handle = OpenProcess(
+                    PROCESS_QUERY_LIMITED_INFORMATION,
+                    false,
+                    pid,
+                );
+                if let Ok(handle) = handle {
+                    let mut io_counters = IO_COUNTERS::default();
+                    if GetProcessIoCounters(handle, &mut io_counters).is_ok() {
+                        // Get process name
+                        let mut buffer = [0u16; 260];
+                        let len = GetModuleFileNameExW(handle, None, &mut buffer);
+                        if len > 0 {
+                            let path = String::from_utf16_lossy(&buffer[..len as usize]);
+                            if let Some(filename) = std::path::Path::new(&path)
+                                .file_name()
+                                .and_then(|f| f.to_str()) {
+                                result.push(ProcessIoSnapshot {
+                                    pid,
+                                    name: filename.to_string(),
+                                    read_bytes: io_counters.ReadTransferCount,
+                                    write_bytes: io_counters.WriteTransferCount,
+                                });
+                            }
+                        }
+                    }
+                    CloseHandle(handle).ok();
+                }
+            }
+        }
+    }
+    result
+}
+
+
 pub struct TelemetryService {
     realtime_sender: broadcast::Sender<RealtimeStats>,
     db_path: String,
@@ -159,8 +223,10 @@ impl TelemetryService {
             let mut last_db_flush = Instant::now();
             let mut tick_count: u32 = 0;
             let mut current_ping_ms: u32 = 0;
-            let mut last_non_self_app = "System".to_string();
             
+            // For tracking PIDs to their previous IO stats
+            let mut last_process_io: HashMap<u32, (u64, u64)> = HashMap::new();
+
             // Local map to buffer stats before writing to SQLite
             let mut accumulator: HashMap<String, ProcessStatsAccumulator> = HashMap::new();
 
@@ -171,7 +237,7 @@ impl TelemetryService {
                 let duration = now.duration_since(last_poll);
                 last_poll = now;
 
-                // 1. Calculate Network Speed
+                // 1. Calculate system-wide network interface speed
                 let current_octets = get_total_network_octets();
                 let rx_diff = current_octets.0.saturating_sub(last_octets.0);
                 let tx_diff = current_octets.1.saturating_sub(last_octets.1);
@@ -181,7 +247,7 @@ impl TelemetryService {
                 let download_speed = if secs > 0.0 { (rx_diff as f64 / secs) as u64 } else { 0 };
                 let upload_speed = if secs > 0.0 { (tx_diff as f64 / secs) as u64 } else { 0 };
 
-                // 2. Query Active App & Screen Time
+                // 2. Query active foreground app (for screen time tracking)
                 let active_app = get_active_process_name();
                 let idle_ms = get_idle_time_millis();
                 
@@ -189,57 +255,92 @@ impl TelemetryService {
                 let is_idle = idle_ms > (5 * 60 * 1000);
                 let active_time = if is_idle || active_app == "Idle" { 0 } else { 1 };
 
-                // Filter out self app windows and Idle from the network attribution loop
-                let is_self_app = active_app.eq_ignore_ascii_case(&*SELF_EXE_NAME)
-                               || active_app.eq_ignore_ascii_case("tauri-app.exe")
-                               || active_app.eq_ignore_ascii_case("Internet Speed Meter")
-                               || active_app.eq_ignore_ascii_case("Idle");
-                               
-                if !is_self_app {
-                    last_non_self_app = active_app.clone();
+                // 3. Query I/O stats for all running processes
+                let current_proc_snapshots = get_all_processes_io();
+                let mut active_io_procs = Vec::new();
+                let mut total_read_delta = 0u64;
+                let mut total_write_delta = 0u64;
+
+                let mut current_pids = std::collections::HashSet::new();
+
+                for proc in &current_proc_snapshots {
+                    current_pids.insert(proc.pid);
+                    
+                    let prev_io = last_process_io.get(&proc.pid);
+                    let (read_delta, write_delta) = match prev_io {
+                        Some(&(prev_r, prev_w)) => {
+                            let r_delta = proc.read_bytes.saturating_sub(prev_r);
+                            let w_delta = proc.write_bytes.saturating_sub(prev_w);
+                            (r_delta, w_delta)
+                        }
+                        None => (0, 0),
+                    };
+
+                    // Update last known process IO stats
+                    last_process_io.insert(proc.pid, (proc.read_bytes, proc.write_bytes));
+
+                    if read_delta > 0 || write_delta > 0 {
+                        active_io_procs.push((proc.name.clone(), read_delta, write_delta));
+                        total_read_delta += read_delta;
+                        total_write_delta += write_delta;
+                    }
                 }
 
-                // If focused app is the Speed Meter dashboard/settings or Idle,
-                // we attribute the network speeds to the last focused non-self app.
-                let app_to_attribute = if is_self_app {
-                    last_non_self_app.clone()
-                } else {
-                    active_app.clone()
-                };
+                // Clean up dead PIDs from our tracking map to prevent memory leaks
+                last_process_io.retain(|pid, _| current_pids.contains(pid));
 
-                // 3. Query Battery Info
-                let (battery_pct, is_charging) = get_battery_info();
+                // 4. Distribute system network speeds across active I/O processes proportionally (calibration)
+                let mut process_speeds = Vec::new();
 
-                // 4. Measure ping every 5 ticks (~5 seconds) in a separate thread to avoid blocking
-                tick_count = tick_count.wrapping_add(1);
-                if tick_count % 5 == 1 {
-                    current_ping_ms = measure_ping();
+                if total_read_delta > 0 || total_write_delta > 0 {
+                    for (name, r_delta, w_delta) in active_io_procs {
+                        let proc_down_speed = if total_read_delta > 0 {
+                            (r_delta as f64 / total_read_delta as f64 * download_speed as f64) as u64
+                        } else {
+                            0
+                        };
+
+                        let proc_up_speed = if total_write_delta > 0 {
+                            (w_delta as f64 / total_write_delta as f64 * upload_speed as f64) as u64
+                        } else {
+                            0
+                        };
+
+                        if proc_down_speed > 0 || proc_up_speed > 0 {
+                            process_speeds.push(ProcessSpeed {
+                                name: name.clone(),
+                                download_speed: proc_down_speed,
+                                upload_speed: proc_up_speed,
+                            });
+
+                            let entry = accumulator.entry(name).or_insert(ProcessStatsAccumulator {
+                                bytes_downloaded: 0,
+                                bytes_uploaded: 0,
+                                screen_time_seconds: 0,
+                            });
+                            entry.bytes_downloaded += proc_down_speed;
+                            entry.bytes_uploaded += proc_up_speed;
+                        }
+                    }
+                } else if download_speed > 0 || upload_speed > 0 {
+                    // Fallback: If no process was captured having I/O we attribute network speed to foreground
+                    let fallback_app = active_app.clone();
+                    process_speeds.push(ProcessSpeed {
+                        name: fallback_app.clone(),
+                        download_speed,
+                        upload_speed,
+                    });
+
+                    let entry = accumulator.entry(fallback_app).or_insert(ProcessStatsAccumulator {
+                        bytes_downloaded: 0,
+                        bytes_uploaded: 0,
+                        screen_time_seconds: 0,
+                    });
+                    entry.bytes_downloaded += rx_diff;
+                    entry.bytes_uploaded += tx_diff;
                 }
 
-                // 5. Update the real-time structure
-                let stats = RealtimeStats {
-                    download_speed,
-                    upload_speed,
-                    battery_percentage: battery_pct,
-                    is_charging,
-                    active_app: app_to_attribute.clone(), // broadcast the attributed app to Svelte!
-                    ping_ms: current_ping_ms,
-                };
-                
-                // Send real-time updates to UI
-                let _ = tx.send(stats);
-
-                // 5. Accumulate telemetry data per process
-                // Attribute network traffic to the active network app (app_to_attribute)
-                let net_entry = accumulator.entry(app_to_attribute).or_insert(ProcessStatsAccumulator {
-                    bytes_downloaded: 0,
-                    bytes_uploaded: 0,
-                    screen_time_seconds: 0,
-                });
-                net_entry.bytes_downloaded += rx_diff;
-                net_entry.bytes_uploaded += tx_diff;
-
-                // Attribute screen time to the actual active app (active_app)
+                // Accumulate screen time seconds for the actual active foreground app
                 let screen_entry = accumulator.entry(active_app.clone()).or_insert(ProcessStatsAccumulator {
                     bytes_downloaded: 0,
                     bytes_uploaded: 0,
@@ -247,14 +348,35 @@ impl TelemetryService {
                 });
                 screen_entry.screen_time_seconds += active_time;
 
-                // 6. Every 60 seconds, flush accumulated metrics to SQLite
+                // 5. Query Battery Info
+                let (battery_pct, is_charging) = get_battery_info();
+
+                // 6. Measure ping latency every 5 ticks (~5 seconds)
+                tick_count = tick_count.wrapping_add(1);
+                if tick_count % 5 == 1 {
+                    current_ping_ms = measure_ping();
+                }
+
+                // 7. Update real-time stats struct and broadcast it to the Svelte UI
+                let stats = RealtimeStats {
+                    download_speed,
+                    upload_speed,
+                    battery_percentage: battery_pct,
+                    is_charging,
+                    active_app: active_app.clone(), // Widget displays actual active app
+                    ping_ms: current_ping_ms,
+                    process_speeds,
+                };
+                
+                let _ = tx.send(stats);
+
+                // 8. Every 60 seconds, flush accumulated telemetry metrics to SQLite
                 if now.duration_since(last_db_flush) >= Duration::from_secs(60) {
                     last_db_flush = now;
                     
                     if let Ok(conn) = crate::db::open_conn(&db_path) {
                         let epoch_now = Local::now().timestamp();
-                        // Round down to the nearest 5-minute interval (300 seconds)
-                        let interval_timestamp = (epoch_now / 300) * 300;
+                        let interval_timestamp = (epoch_now / 300) * 300; // Round to 5-minute bucket
 
                         for (process_name, acc) in accumulator.drain() {
                             let _ = crate::db::log_interval(
@@ -267,7 +389,6 @@ impl TelemetryService {
                             );
                         }
                         
-                        // Run database rolls/cleanup
                         let _ = crate::db::aggregate_data(&conn);
                     }
                 }

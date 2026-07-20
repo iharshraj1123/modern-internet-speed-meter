@@ -19,6 +19,7 @@ static LATEST_STATS: Lazy<Mutex<telemetry::RealtimeStats>> = Lazy::new(|| {
         is_charging: true,
         active_app: "System".to_string(),
         ping_ms: 0,
+        process_speeds: Vec::new(),
     })
 });
 // Track which data-limit alert thresholds have already been sent (to avoid spam)
