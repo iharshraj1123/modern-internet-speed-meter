@@ -100,6 +100,7 @@ async fn open_settings(app: AppHandle) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Force rebuild to bundle updated icons
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_autostart::init(
@@ -151,6 +152,26 @@ pub fn run() {
             let _tray = TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&tray_menu)
+                .show_menu_on_left_click(false)
+                .on_tray_icon_event(|tray, event| {
+                    if let tauri::tray::TrayIconEvent::Click {
+                        button: tauri::tray::MouseButton::Left,
+                        button_state: tauri::tray::MouseButtonState::Up,
+                        ..
+                    } = event {
+                        let app_handle = tray.app_handle();
+                        if let Some(w) = app_handle.get_webview_window("main") {
+                            if let Ok(visible) = w.is_visible() {
+                                if visible {
+                                    w.hide().unwrap();
+                                } else {
+                                    w.show().unwrap();
+                                    w.set_focus().unwrap();
+                                }
+                            }
+                        }
+                    }
+                })
                 .on_menu_event(|app_handle, event| {
                     match event.id.as_ref() {
                         "toggle_widget" => {
@@ -168,13 +189,13 @@ pub fn run() {
                         "open_dashboard" => {
                             let handle = app_handle.clone();
                             tauri::async_runtime::spawn(async move {
-                                let _ = open_dashboard(handle).await;
+                                  let _ = open_dashboard(handle).await;
                             });
                         }
                         "open_settings" => {
                             let handle = app_handle.clone();
                             tauri::async_runtime::spawn(async move {
-                                let _ = open_settings(handle).await;
+                                  let _ = open_settings(handle).await;
                             });
                         }
                         "quit" => {
