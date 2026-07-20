@@ -3,6 +3,15 @@ use std::net::TcpStream;
 use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
 use chrono::Local;
+use once_cell::sync::Lazy;
+
+static SELF_EXE_NAME: Lazy<String> = Lazy::new(|| {
+    std::env::current_exe()
+        .ok()
+        .and_then(|path| path.file_name().map(|f| f.to_string_lossy().into_owned()))
+        .unwrap_or_else(|| "tauri-app.exe".to_string())
+});
+
 
 use windows::Win32::Foundation::CloseHandle;
 use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
@@ -150,6 +159,7 @@ impl TelemetryService {
             let mut last_db_flush = Instant::now();
             let mut tick_count: u32 = 0;
             let mut current_ping_ms: u32 = 0;
+            let mut last_non_self_app = "System".to_string();
             
             // Local map to buffer stats before writing to SQLite
             let mut accumulator: HashMap<String, ProcessStatsAccumulator> = HashMap::new();
@@ -179,6 +189,24 @@ impl TelemetryService {
                 let is_idle = idle_ms > (5 * 60 * 1000);
                 let active_time = if is_idle || active_app == "Idle" { 0 } else { 1 };
 
+                // Filter out self app windows and Idle from the network attribution loop
+                let is_self_app = active_app.eq_ignore_ascii_case(&*SELF_EXE_NAME)
+                               || active_app.eq_ignore_ascii_case("tauri-app.exe")
+                               || active_app.eq_ignore_ascii_case("Internet Speed Meter")
+                               || active_app.eq_ignore_ascii_case("Idle");
+                               
+                if !is_self_app {
+                    last_non_self_app = active_app.clone();
+                }
+
+                // If focused app is the Speed Meter dashboard/settings or Idle,
+                // we attribute the network speeds to the last focused non-self app.
+                let app_to_attribute = if is_self_app {
+                    last_non_self_app.clone()
+                } else {
+                    active_app.clone()
+                };
+
                 // 3. Query Battery Info
                 let (battery_pct, is_charging) = get_battery_info();
 
@@ -194,7 +222,7 @@ impl TelemetryService {
                     upload_speed,
                     battery_percentage: battery_pct,
                     is_charging,
-                    active_app: active_app.clone(),
+                    active_app: app_to_attribute.clone(), // broadcast the attributed app to Svelte!
                     ping_ms: current_ping_ms,
                 };
                 
@@ -202,16 +230,22 @@ impl TelemetryService {
                 let _ = tx.send(stats);
 
                 // 5. Accumulate telemetry data per process
-                // Note: We attribute the system-wide network transfer delta to the active foreground process.
-                // This is a highly efficient estimate for screen-time-active apps.
-                let entry = accumulator.entry(active_app.clone()).or_insert(ProcessStatsAccumulator {
+                // Attribute network traffic to the active network app (app_to_attribute)
+                let net_entry = accumulator.entry(app_to_attribute).or_insert(ProcessStatsAccumulator {
                     bytes_downloaded: 0,
                     bytes_uploaded: 0,
                     screen_time_seconds: 0,
                 });
-                entry.bytes_downloaded += rx_diff;
-                entry.bytes_uploaded += tx_diff;
-                entry.screen_time_seconds += active_time;
+                net_entry.bytes_downloaded += rx_diff;
+                net_entry.bytes_uploaded += tx_diff;
+
+                // Attribute screen time to the actual active app (active_app)
+                let screen_entry = accumulator.entry(active_app.clone()).or_insert(ProcessStatsAccumulator {
+                    bytes_downloaded: 0,
+                    bytes_uploaded: 0,
+                    screen_time_seconds: 0,
+                });
+                screen_entry.screen_time_seconds += active_time;
 
                 // 6. Every 60 seconds, flush accumulated metrics to SQLite
                 if now.duration_since(last_db_flush) >= Duration::from_secs(60) {
