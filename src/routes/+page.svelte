@@ -48,22 +48,22 @@
 
   // Compute SVG path string from history
   function getPathData(history, height, maxVal) {
-    if (maxVal === 0) maxVal = 1;
+    if (!maxVal || maxVal <= 0) maxVal = 1;
     const points = history.map((val, idx) => {
       const x = (idx / (history.length - 1)) * 230; // SVG width is ~230
-      const y = height - (val / maxVal) * (height - 4);
-      return `${x},${y}`;
+      const y = (height - 3) - (val / maxVal) * (height - 6);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
     });
     return `M ${points.join(" L ")}`;
   }
 
   // Compute SVG closed path for fill area
   function getAreaPathData(history, height, maxVal) {
-    if (maxVal === 0) maxVal = 1;
+    if (!maxVal || maxVal <= 0) maxVal = 1;
     const points = history.map((val, idx) => {
       const x = (idx / (history.length - 1)) * 230;
-      const y = height - (val / maxVal) * (height - 4);
-      return `${x},${y}`;
+      const y = (height - 3) - (val / maxVal) * (height - 6);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
     });
     return `M 0,${height} L ${points.join(" L ")} L 230,${height} Z`;
   }
@@ -249,16 +249,7 @@
     </div>
 
     <!-- Chart rendering -->
-    {#if $settings.graphType === 'combined'}
-      <div class="chart-container combined">
-        <svg viewBox="0 0 230 28" class="chart-svg" preserveAspectRatio="none">
-          <path d={combinedDownAreaPath} class="chart-area down-area" />
-          <path d={combinedUpAreaPath} class="chart-area up-area" />
-          <path d={combinedDownPath} class="chart-line down-line" />
-          <path d={combinedUpPath} class="chart-line up-line" />
-        </svg>
-      </div>
-    {:else if $settings.graphType === 'separate'}
+    {#if $settings.graphType === 'separate'}
       <div class="chart-container split">
         <svg viewBox="0 0 230 12" class="chart-svg" preserveAspectRatio="none">
           <path d={downAreaPath} class="chart-area down-area" />
@@ -267,6 +258,18 @@
         <svg viewBox="0 0 230 12" class="chart-svg" preserveAspectRatio="none">
           <path d={upAreaPath} class="chart-area up-area" />
           <path d={upPath} class="chart-line up-line" />
+        </svg>
+      </div>
+    {:else if $settings.graphType === 'hidden'}
+      <!-- Hidden graph -->
+    {:else}
+      <!-- Combined Graph (Default) -->
+      <div class="chart-container combined">
+        <svg viewBox="0 0 230 28" class="chart-svg" preserveAspectRatio="none">
+          <path d={combinedDownAreaPath} class="chart-area down-area" />
+          <path d={combinedUpAreaPath} class="chart-area up-area" />
+          <path d={combinedDownPath} class="chart-line down-line" />
+          <path d={combinedUpPath} class="chart-line up-line" />
         </svg>
       </div>
     {/if}
