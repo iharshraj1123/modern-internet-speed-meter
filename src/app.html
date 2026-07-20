@@ -17,6 +17,35 @@
         overflow: hidden;
         box-sizing: border-box;
       }
+
+      /* Global Theme-Adaptive Modern Scrollbars */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+
+      ::-webkit-scrollbar-thumb {
+        background: rgba(148, 163, 184, 0.25);
+        border-radius: 99px;
+        transition: background 0.2s;
+      }
+
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--accent-emerald, #10b981);
+      }
+
+      ::-webkit-scrollbar-corner {
+        background: transparent;
+      }
+
+      * {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(148, 163, 184, 0.25) transparent;
+      }
     </style>
     %sveltekit.head%
   </head>

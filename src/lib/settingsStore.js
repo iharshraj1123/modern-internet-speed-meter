@@ -21,6 +21,29 @@ const DEFAULT_SETTINGS = {
     showPing: true
 };
 
+// Accent color palette definitions
+export const ACCENT_COLORS = {
+    emerald: { light: "#059669", dark: "#10b981", name: "Emerald" },
+    violet: { light: "#7c3aed", dark: "#8b5cf6", name: "Violet" },
+    sky: { light: "#0284c7", dark: "#38bdf8", name: "Sky Blue" },
+    amber: { light: "#d97706", dark: "#f59e0b", name: "Amber" },
+    rose: { light: "#e11d48", dark: "#f43f5e", name: "Rose" },
+    coral: { light: "#ea580c", dark: "#f97316", name: "Coral" }
+};
+
+export function applyAccentTheme(accentName, theme) {
+    if (typeof document === 'undefined') return;
+    const palette = ACCENT_COLORS[accentName] || ACCENT_COLORS.emerald;
+    const isDark = theme === 'dark' || (theme !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    const color = isDark ? palette.dark : palette.light;
+
+    document.documentElement.style.setProperty('--metric-down', color);
+    document.documentElement.style.setProperty('--accent-emerald', color);
+    document.documentElement.style.setProperty('--input-focus', color);
+    document.documentElement.style.setProperty('--widget-hover-border', `${color}55`);
+    document.documentElement.style.setProperty('--chart-down-fill', `${color}22`);
+}
+
 function createSettingsStore() {
     // Load from localStorage if present
     let initial = { ...DEFAULT_SETTINGS };
@@ -40,8 +63,11 @@ function createSettingsStore() {
 
     if (typeof window !== 'undefined') {
         subscribe(value => {
-            if (value && value.theme) {
-                document.documentElement.setAttribute('data-theme', value.theme);
+            if (value) {
+                if (value.theme) {
+                    document.documentElement.setAttribute('data-theme', value.theme);
+                }
+                applyAccentTheme(value.accentColor, value.theme);
             }
         });
 

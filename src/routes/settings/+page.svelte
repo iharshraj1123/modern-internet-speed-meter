@@ -2,20 +2,7 @@
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { openUrl } from "@tauri-apps/plugin-opener";
-  import { settings } from "../../lib/settingsStore";
-
-  async function visitDonationLink(url) {
-    try {
-      await invoke("open_url", { url });
-    } catch (e) {
-      console.error("Failed to open link", e);
-      try {
-        await openUrl(url);
-      } catch (err) {
-        window.open(url, "_blank");
-      }
-    }
-  }
+  import { settings, ACCENT_COLORS } from "../../lib/settingsStore";
 
   let activeTab = $state("general");
   let autostartEnabled = $state(false);
@@ -31,14 +18,18 @@
   // Hotkey states
   let recordingHotkey = $state(false);
 
-  const ACCENT_COLORS = {
-    emerald: { light: "#059669", dark: "#10b981", name: "Emerald" },
-    violet: { light: "#7c3aed", dark: "#8b5cf6", name: "Violet" },
-    sky: { light: "#0284c7", dark: "#38bdf8", name: "Sky Blue" },
-    amber: { light: "#d97706", dark: "#f59e0b", name: "Amber" },
-    rose: { light: "#e11d48", dark: "#f43f5e", name: "Rose" },
-    coral: { light: "#ea580c", dark: "#f97316", name: "Coral" }
-  };
+  async function visitDonationLink(url) {
+    try {
+      await invoke("open_url", { url });
+    } catch (e) {
+      console.error("Failed to open link", e);
+      try {
+        await openUrl(url);
+      } catch (err) {
+        window.open(url, "_blank");
+      }
+    }
+  }
 
   $effect(() => {
     const accent = $settings.accentColor || "emerald";
@@ -787,7 +778,7 @@
 
   .nav-btn.active {
     color: var(--accent-emerald);
-    background: rgba(16, 185, 129, 0.08);
+    background: var(--chart-down-fill, rgba(16, 185, 129, 0.12));
   }
 
   .main-settings {

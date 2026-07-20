@@ -3,8 +3,12 @@
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
-  import { settings, formatSpeed } from "../../lib/settingsStore";
+  import { settings, formatSpeed, applyAccentTheme } from "../../lib/settingsStore";
   import { groupProcesses, getDisplayName } from "../../lib/processGroups";
+
+  $effect(() => {
+    applyAccentTheme($settings.accentColor, $settings.theme);
+  });
 
   let period = $state("live"); // 'live', 'hourly', 'daily', 'weekly', 'monthly', 'yearly'
   let stats = $state([]);
