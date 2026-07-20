@@ -7,6 +7,41 @@
   let autostartEnabled = $state(false);
   let clearSuccess = $state(false);
 
+  // Storage Analytics states
+  let dbInfo = $state(null);
+  let loadingDbInfo = $state(false);
+  let vacuumSuccess = $state(false);
+  let rawRetention = $state(7);
+  let hourlyRetention = $state(90);
+
+  // Hotkey states
+  let recordingHotkey = $state(false);
+
+  const ACCENT_COLORS = {
+    emerald: { light: "#059669", dark: "#10b981", name: "Emerald" },
+    violet: { light: "#7c3aed", dark: "#8b5cf6", name: "Violet" },
+    sky: { light: "#0284c7", dark: "#38bdf8", name: "Sky Blue" },
+    amber: { light: "#d97706", dark: "#f59e0b", name: "Amber" },
+    rose: { light: "#e11d48", dark: "#f43f5e", name: "Rose" },
+    coral: { light: "#ea580c", dark: "#f97316", name: "Coral" }
+  };
+
+  $effect(() => {
+    const accent = $settings.accentColor || "emerald";
+    const colors = ACCENT_COLORS[accent] || ACCENT_COLORS.emerald;
+    
+    // Dynamically apply accent color to CSS variables on HTML element
+    document.documentElement.style.setProperty('--accent-emerald', colors.dark);
+    document.documentElement.style.setProperty('--input-focus', colors.dark);
+  });
+
+  // Pull database metrics when Data tab becomes active
+  $effect(() => {
+    if (activeTab === 'data') {
+      loadDbInfo();
+    }
+  });
+
   onMount(async () => {
     try {
       autostartEnabled = await invoke("plugin:autostart|is_enabled");
@@ -26,7 +61,6 @@
       autostartEnabled = checked;
     } catch (err) {
       console.error("Failed to toggle autostart", err);
-      // Revert UI toggle on error
       e.target.checked = !checked;
     }
   }
@@ -39,18 +73,99 @@
     });
   }
 
+  async function loadDbInfo() {
+    loadingDbInfo = true;
+    try {
+      const info = await invoke("get_db_info");
+      dbInfo = info;
+      rawRetention = info.raw_retention_days;
+      hourlyRetention = info.hourly_retention_days;
+    } catch (err) {
+      console.error("Failed to fetch database info", err);
+    } finally {
+      loadingDbInfo = false;
+    }
+  }
+
+  async function saveRetentionPolicy() {
+    try {
+      await invoke("set_retention_policy", {
+        rawDays: parseInt(rawRetention),
+        hourlyDays: parseInt(hourlyRetention)
+      });
+      loadDbInfo();
+    } catch (err) {
+      console.error("Failed to save retention policy", err);
+    }
+  }
+
+  async function handleVacuumDb() {
+    try {
+      await invoke("vacuum_db");
+      vacuumSuccess = true;
+      setTimeout(() => vacuumSuccess = false, 3000);
+      loadDbInfo();
+    } catch (err) {
+      console.error("Failed to vacuum database", err);
+    }
+  }
+
   async function handleClearDb() {
     if (confirm("Are you sure you want to clear all historical network and screen time usage data?")) {
       try {
         await invoke("get_historical_stats", { period: "clear" });
         clearSuccess = true;
         setTimeout(() => clearSuccess = false, 3000);
+        loadDbInfo();
       } catch (err) {
         console.error("Failed to clear database", err);
       }
     }
   }
+
+  function startRecordingHotkey() {
+    recordingHotkey = true;
+  }
+
+  function handleKeyDown(event) {
+    if (!recordingHotkey) return;
+    event.preventDefault();
+
+    const key = event.key;
+    if (["Control", "Shift", "Alt", "Meta"].includes(key)) {
+      return;
+    }
+
+    const parts = [];
+    if (event.ctrlKey) parts.push("Ctrl");
+    if (event.shiftKey) parts.push("Shift");
+    if (event.altKey) parts.push("Alt");
+    
+    let keyName = key;
+    if (keyName === " ") keyName = "Space";
+    if (keyName.length === 1) keyName = keyName.toUpperCase();
+    parts.push(keyName);
+
+    const shortcut = parts.join("+");
+    updateSetting("globalHotkey", shortcut);
+    recordingHotkey = false;
+
+    invoke("register_hotkey", { shortcut }).catch(err => {
+      console.error("Failed to register recorded hotkey", err);
+    });
+  }
+
+  function formatBytes(bytes) {
+    if (bytes === undefined || isNaN(bytes)) return '0 B';
+    if (bytes === 0) return '0 B';
+    const k = 1000;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }
 </script>
+
+<svelte:window onkeydown={handleKeyDown} />
 
 <main class="settings-panel">
   <header class="header">
@@ -131,11 +246,43 @@
               <span class="slider"></span>
             </label>
           </div>
+
+          <div class="setting-item">
+            <div class="setting-info">
+              <label>Global Show/Hide Shortcut</label>
+              <span>Toggle widget visibility from anywhere using keyboard keys</span>
+            </div>
+            <button 
+              class="hotkey-btn" 
+              class:recording={recordingHotkey}
+              onclick={startRecordingHotkey}
+            >
+              {recordingHotkey ? "Press key combo..." : ($settings.globalHotkey || "Click to assign")}
+            </button>
+          </div>
         </section>
 
       {:else if activeTab === 'appearance'}
         <section class="section">
           <h2>Appearance & Theme</h2>
+
+          <div class="setting-item">
+            <div class="setting-info">
+              <label>Accent Color Theme</label>
+              <span>Choose your personal styling highlights across all views</span>
+            </div>
+            <div class="accent-picker">
+              {#each Object.entries(ACCENT_COLORS) as [colorKey, val]}
+                <button 
+                  class="accent-swatch {colorKey}" 
+                  class:active={$settings.accentColor === colorKey}
+                  style="background-color: {val.dark};" 
+                  onclick={() => updateSetting("accentColor", colorKey)}
+                  title={val.name}
+                ></button>
+              {/each}
+            </div>
+          </div>
 
           <div class="setting-item">
             <div class="setting-info">
@@ -275,24 +422,157 @@
               <span class="slider"></span>
             </label>
           </div>
+
+          <div class="setting-item" style="margin-top: 10px; border-top: 1px solid var(--border-color); padding-top: 15px;">
+            <div class="setting-info">
+              <label for="dailyLimit">Daily Data Cap (GB)</label>
+              <span>Monitor and alert when network usage exceeds daily budget</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <input 
+                id="dailyLimit"
+                type="number" 
+                min="1" 
+                max="500" 
+                value={$settings.dailyLimitGB} 
+                disabled={!$settings.dailyLimitEnabled}
+                onchange={(e) => updateSetting("dailyLimitGB", parseFloat(e.target.value))}
+                class="num-input"
+              />
+              <label class="switch">
+                <input 
+                  type="checkbox" 
+                  checked={$settings.dailyLimitEnabled} 
+                  onchange={(e) => updateSetting("dailyLimitEnabled", e.target.checked)} 
+                />
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-info">
+              <label for="monthlyLimit">Monthly Data Cap (GB)</label>
+              <span>Monitor and alert when network usage exceeds monthly budget</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <input 
+                id="monthlyLimit"
+                type="number" 
+                min="1" 
+                max="5000" 
+                value={$settings.monthlyLimitGB} 
+                disabled={!$settings.monthlyLimitEnabled}
+                onchange={(e) => updateSetting("monthlyLimitGB", parseFloat(e.target.value))}
+                class="num-input"
+              />
+              <label class="switch">
+                <input 
+                  type="checkbox" 
+                  checked={$settings.monthlyLimitEnabled} 
+                  onchange={(e) => updateSetting("monthlyLimitEnabled", e.target.checked)} 
+                />
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
         </section>
 
       {:else if activeTab === 'data'}
         <section class="section">
           <h2>Storage Management</h2>
           
-          <div class="setting-item">
-            <div class="setting-info">
-              <label>Database Diagnostics</label>
-              <span>Clear local statistics logs or purge cache files</span>
+          {#if loadingDbInfo}
+            <div class="db-loader">
+              <div class="spinner"></div>
+              <span>Fetching database telemetry diagnostics...</span>
             </div>
-            <button class="danger-btn" onclick={handleClearDb}>Clear History Data</button>
-          </div>
+          {:else if dbInfo}
+            <div class="storage-card">
+              <div class="storage-stat">
+                <span class="stat-label">Database File Size</span>
+                <span class="stat-val">{formatBytes(dbInfo.total_size_bytes)}</span>
+              </div>
+              <div class="storage-breakdown">
+                <div class="breakdown-item">
+                  <span>Raw Telemetry Rows</span>
+                  <strong>{dbInfo.raw_rows.toLocaleString()}</strong>
+                </div>
+                <div class="breakdown-item">
+                  <span>Hourly Rollup Rows</span>
+                  <strong>{dbInfo.hourly_rows.toLocaleString()}</strong>
+                </div>
+                <div class="breakdown-item">
+                  <span>Daily Rollup Rows</span>
+                  <strong>{dbInfo.daily_rows.toLocaleString()}</strong>
+                </div>
+              </div>
+            </div>
 
-          {#if clearSuccess}
-            <div class="success-alert">
-              Database stats cleared successfully!
-            </div>
+            <section class="section-sub" style="margin-top: 16px;">
+              <h3>Retention Policies</h3>
+              
+              <div class="setting-item">
+                <div class="setting-info">
+                  <label for="rawDays">Purge Raw Telemetry ({rawRetention} days)</label>
+                  <span>Store high-frequency 5-minute telemetry intervals before rollup</span>
+                </div>
+                <input 
+                  id="rawDays"
+                  type="range" 
+                  min="1" 
+                  max="30" 
+                  value={rawRetention}
+                  oninput={(e) => rawRetention = parseInt(e.target.value)}
+                  onchange={saveRetentionPolicy}
+                  class="range-input"
+                />
+              </div>
+
+              <div class="setting-item">
+                <div class="setting-info">
+                  <label for="hourlyDays">Purge Hourly Rollups ({hourlyRetention} days)</label>
+                  <span>Store medium-frequency hourly aggregated usage statistics</span>
+                </div>
+                <input 
+                  id="hourlyDays"
+                  type="range" 
+                  min="7" 
+                  max="365" 
+                  value={hourlyRetention}
+                  oninput={(e) => hourlyRetention = parseInt(e.target.value)}
+                  onchange={saveRetentionPolicy}
+                  class="range-input"
+                />
+              </div>
+            </section>
+
+            <section class="section-sub" style="margin-top: 16px;">
+              <h3>Database Maintenance</h3>
+              
+              <div class="setting-item">
+                <div class="setting-info">
+                  <label>Compact Database (Vacuum)</label>
+                  <span>Reclaim unused database file storage pages and optimize reads</span>
+                </div>
+                <button class="action-btn-styled" onclick={handleVacuumDb}>Optimize Now</button>
+              </div>
+
+              <div class="setting-item">
+                <div class="setting-info">
+                  <label>Clear Telemetry History</label>
+                  <span>Reset all usage records and start fresh</span>
+                </div>
+                <button class="danger-btn" onclick={handleClearDb}>Clear History Data</button>
+              </div>
+            </section>
+
+            {#if clearSuccess}
+              <div class="success-alert">Database stats cleared successfully!</div>
+            {/if}
+            {#if vacuumSuccess}
+              <div class="success-alert">Database compaction and optimization completed!</div>
+            {/if}
           {/if}
         </section>
       {/if}
@@ -617,4 +897,165 @@
     margin-top: 12px;
     text-align: center;
   }
+
+  /* Accent Swatches */
+  .accent-picker {
+    display: flex;
+    gap: 8px;
+  }
+
+  .accent-swatch {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: transform 0.15s, border-color 0.15s;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.12);
+  }
+
+  .accent-swatch:hover {
+    transform: scale(1.15);
+  }
+
+  .accent-swatch.active {
+    border-color: var(--text-primary);
+  }
+
+  /* Hotkey recorder button */
+  .hotkey-btn {
+    background: var(--btn-bg);
+    border: 1px solid var(--btn-border);
+    color: var(--text-primary);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    min-width: 120px;
+    transition: all 0.2s;
+  }
+
+  .hotkey-btn:hover {
+    background: var(--btn-hover);
+  }
+
+  .hotkey-btn.recording {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: #ef4444;
+    color: #ef4444;
+    animation: pulse 1.5s infinite;
+  }
+
+  @keyframes pulse {
+    0% { opacity: 0.6; }
+    50% { opacity: 1.0; }
+    100% { opacity: 0.6; }
+  }
+
+  /* Number inputs */
+  .num-input {
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    color: var(--text-primary);
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    width: 60px;
+    outline: none;
+    text-align: center;
+  }
+
+  .num-input:focus {
+    border-color: var(--input-focus);
+  }
+
+  .num-input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Storage Diagnostics View */
+  .storage-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    padding: 14px;
+    margin-top: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+  }
+
+  .storage-stat {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+  }
+
+  .stat-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+
+  .stat-val {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--accent-emerald);
+  }
+
+  .storage-breakdown {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .breakdown-item {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
+  .breakdown-item strong {
+    color: var(--text-primary);
+  }
+
+  .section-sub h3 {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 12px 0 6px 0;
+  }
+
+  .db-loader {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 0;
+    gap: 12px;
+    color: var(--text-secondary);
+    font-size: 11px;
+  }
+
+  .action-btn-styled {
+    background: var(--btn-bg);
+    border: 1px solid var(--btn-border);
+    color: var(--text-primary);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .action-btn-styled:hover {
+    background: var(--btn-hover);
+  }
 </style>
+

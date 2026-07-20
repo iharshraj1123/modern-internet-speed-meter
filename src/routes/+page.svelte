@@ -11,6 +11,9 @@
   let batteryPct = $state(100);
   let isCharging = $state(true);
   let activeApp = $state("System");
+  let pingMs = $state(0);
+  let todayTotalBytes = $state(0);
+  let ticks = 0;
 
   // JS-driven window drag — works the same as data-tauri-drag-region but
   // respects JS event propagation, so resize handles can stopPropagation to block it.
@@ -65,6 +68,34 @@
     return `M 0,${height} L ${points.join(" L ")} L 230,${height} Z`;
   }
 
+  // Curated color themes mapping
+  const ACCENT_COLORS = {
+    emerald: { light: "#059669", dark: "#10b981" },
+    violet: { light: "#7c3aed", dark: "#8b5cf6" },
+    sky: { light: "#0284c7", dark: "#38bdf8" },
+    amber: { light: "#d97706", dark: "#f59e0b" },
+    rose: { light: "#e11d48", dark: "#f43f5e" },
+    coral: { light: "#ea580c", dark: "#f97316" }
+  };
+
+  $effect(() => {
+    const accent = $settings.accentColor || "emerald";
+    const colors = ACCENT_COLORS[accent] || ACCENT_COLORS.emerald;
+    
+    // Dynamically apply accent color to CSS variables on HTML element
+    document.documentElement.style.setProperty('--metric-down', colors.dark);
+    document.documentElement.style.setProperty('--accent-emerald', colors.dark);
+    document.documentElement.style.setProperty('--widget-hover-border', `${colors.dark}55`);
+    document.documentElement.style.setProperty('--chart-down-fill', `${colors.dark}22`);
+  });
+
+  // Calculate daily limit usage percentage
+  let dailyUsagePct = $derived(
+    $settings.dailyLimitEnabled && $settings.dailyLimitGB > 0
+      ? (todayTotalBytes / ($settings.dailyLimitGB * 1024 * 1024 * 1024)) * 100
+      : 0
+  );
+
   onMount(async () => {
     // Disable right-click context menu
     document.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -77,11 +108,33 @@
       batteryPct = initial.battery_percentage;
       isCharging = initial.is_charging;
       activeApp = initial.active_app;
+      pingMs = initial.ping_ms || 0;
     } catch (e) {
       console.error("Failed to query initial stats", e);
     }
 
-    // 2. Setup real-time listener from Rust backend
+    // 2. Fetch initial daily limit usage
+    if ($settings.dailyLimitEnabled) {
+      try {
+        const res = await invoke("get_today_usage");
+        if (Array.isArray(res)) {
+          todayTotalBytes = res[0] + res[1];
+        }
+      } catch (err) {
+        console.error("Failed to load initial today total", err);
+      }
+    }
+
+    // 3. Register global hotkey
+    if ($settings.globalHotkey) {
+      try {
+        await invoke("register_hotkey", { shortcut: $settings.globalHotkey });
+      } catch (err) {
+        console.error("Failed to register global hotkey", err);
+      }
+    }
+
+    // 4. Setup real-time listener from Rust backend
     unlistenStats = await listen("realtime-stats", (event) => {
       const data = event.payload;
       downloadSpeed = data.download_speed;
@@ -89,10 +142,32 @@
       batteryPct = data.battery_percentage;
       isCharging = data.is_charging;
       activeApp = data.active_app;
+      pingMs = data.ping_ms || 0;
 
       // Update graphs history
       downloadHistory = [...downloadHistory.slice(1), downloadSpeed];
       uploadHistory = [...uploadHistory.slice(1), uploadSpeed];
+
+      // Run threshold checking and fetch database counts every 30 seconds
+      ticks++;
+      if (ticks % 30 === 1) {
+        if ($settings.dailyLimitEnabled || $settings.monthlyLimitEnabled) {
+          const dailyBytes = $settings.dailyLimitEnabled ? ($settings.dailyLimitGB * 1024 * 1024 * 1024) : 0;
+          const monthlyBytes = $settings.monthlyLimitEnabled ? ($settings.monthlyLimitGB * 1024 * 1024 * 1024) : 0;
+          invoke("check_data_limits", {
+            dailyLimitBytes: dailyBytes,
+            monthlyLimitBytes: monthlyBytes
+          }).catch(console.error);
+        }
+
+        if ($settings.dailyLimitEnabled) {
+          invoke("get_today_usage").then(res => {
+            if (Array.isArray(res)) {
+              todayTotalBytes = res[0] + res[1];
+            }
+          }).catch(console.error);
+        }
+      }
     });
 
     // Sync initial settings to backend
@@ -146,10 +221,12 @@
         <span class="arrow">↑</span>
         <span class="value">{formatSpeed(uploadSpeed, $settings.unit)}</span>
       </div>
-      <div class="battery" title={isCharging ? "Charging" : "Discharging"}>
-        <span class="bat-icon">{isCharging ? "⚡" : "🔋"}</span>
-        <span class="bat-val">{batteryPct}%</span>
-      </div>
+      {#if $settings.showPing}
+        <div class="ping-pill" title="Network Latency">
+          <span class="ping-icon">🌐</span>
+          <span class="ping-val">{pingMs > 0 ? `${pingMs}ms` : '--'}</span>
+        </div>
+      {/if}
     </div>
 
     <!-- Chart rendering -->
@@ -175,11 +252,11 @@
       </div>
     {/if}
 
-    <!--
-      Resize zones — placed AFTER charts so they sit on top in the stacking order.
-      They all call stopPropagation() so the widget's onmousedown (startDrag) never fires.
-      z-index ensures they intercept clicks before the widget background does.
-    -->
+    {#if $settings.dailyLimitEnabled && dailyUsagePct > 0}
+      <div class="quota-bar-container" title="Daily Quota: {dailyUsagePct.toFixed(1)}% Used">
+        <div class="quota-bar-fill" style="width: {Math.min(dailyUsagePct, 100)}%;"></div>
+      </div>
+    {/if}
 
     <!-- Corners (36×36px, very easy to grab) -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -221,23 +298,21 @@
         <span class="arrow">↑</span>
         <span class="value">{formatSpeed(uploadSpeed, $settings.unit)}</span>
       </div>
-      <div class="battery">
-        <span class="bat-icon">{isCharging ? "⚡" : "🔋"}</span>
-        <span class="bat-val">{batteryPct}%</span>
-      </div>
+      {#if $settings.showPing}
+        <div class="ping-pill" title="Network Latency">
+          <span class="ping-icon">🌐</span>
+          <span class="ping-val">{pingMs > 0 ? `${pingMs}ms` : '--'}</span>
+        </div>
+      {/if}
     </div>
 
     <!-- Chart rendering -->
     {#if $settings.graphType === 'combined'}
       <div class="chart-container combined">
         <svg viewBox="0 0 230 28" class="chart-svg" preserveAspectRatio="none">
-          <!-- Download Area fill (green) -->
           <path d={combinedDownAreaPath} class="chart-area down-area" />
-          <!-- Upload Area fill (blue) -->
           <path d={combinedUpAreaPath} class="chart-area up-area" />
-          <!-- Download stroke line (green dotted) -->
           <path d={combinedDownPath} class="chart-line down-line" />
-          <!-- Upload stroke line (blue dotted) -->
           <path d={combinedUpPath} class="chart-line up-line" />
         </svg>
       </div>
@@ -249,6 +324,12 @@
         <svg viewBox="0 0 230 12" class="chart-svg" preserveAspectRatio="none">
           <path d={upAreaPath} class="chart-area up-area" />
         </svg>
+      </div>
+    {/if}
+
+    {#if $settings.dailyLimitEnabled && dailyUsagePct > 0}
+      <div class="quota-bar-container" title="Daily Quota: {dailyUsagePct.toFixed(1)}% Used">
+        <div class="quota-bar-fill" style="width: {Math.min(dailyUsagePct, 100)}%;"></div>
       </div>
     {/if}
   </div>
@@ -389,10 +470,10 @@
     letter-spacing: -0.2px;
   }
 
-  .battery {
+  .ping-pill {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 3px;
     background: var(--battery-bg);
     padding: 2px 5px;
     border-radius: 5px;
@@ -401,9 +482,27 @@
   }
 
   @media (max-width: 189px) {
-    .battery {
+    .ping-pill {
       display: none !important;
     }
+  }
+
+  .quota-bar-container {
+    position: absolute;
+    bottom: 3px;
+    left: 10px;
+    right: 10px;
+    height: 2px;
+    background: rgba(128, 128, 128, 0.1);
+    border-radius: 1px;
+    overflow: hidden;
+  }
+
+  .quota-bar-fill {
+    height: 100%;
+    background: var(--metric-down);
+    border-radius: 1px;
+    transition: width 0.3s ease;
   }
 
   .chart-container {

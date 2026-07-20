@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::net::TcpStream;
 use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
 use chrono::Local;
@@ -19,6 +20,7 @@ pub struct RealtimeStats {
     pub battery_percentage: u8,
     pub is_charging: bool,
     pub active_app: String,
+    pub ping_ms: u32,         // Latency in milliseconds (0 = offline)
 }
 
 // Local accumulator for process telemetry
@@ -109,6 +111,18 @@ fn get_battery_info() -> (u8, bool) {
     (100, true)
 }
 
+// Helper: Measure TCP round-trip time to Cloudflare DNS (1.1.1.1:80)
+fn measure_ping() -> u32 {
+    let start = Instant::now();
+    match TcpStream::connect_timeout(
+        &"1.1.1.1:80".parse().unwrap(),
+        Duration::from_secs(3),
+    ) {
+        Ok(_) => start.elapsed().as_millis() as u32,
+        Err(_) => 0,
+    }
+}
+
 pub struct TelemetryService {
     realtime_sender: broadcast::Sender<RealtimeStats>,
     db_path: String,
@@ -134,6 +148,8 @@ impl TelemetryService {
             let mut last_octets = get_total_network_octets();
             let mut last_poll = Instant::now();
             let mut last_db_flush = Instant::now();
+            let mut tick_count: u32 = 0;
+            let mut current_ping_ms: u32 = 0;
             
             // Local map to buffer stats before writing to SQLite
             let mut accumulator: HashMap<String, ProcessStatsAccumulator> = HashMap::new();
@@ -166,13 +182,20 @@ impl TelemetryService {
                 // 3. Query Battery Info
                 let (battery_pct, is_charging) = get_battery_info();
 
-                // 4. Update the real-time structure
+                // 4. Measure ping every 5 ticks (~5 seconds) in a separate thread to avoid blocking
+                tick_count = tick_count.wrapping_add(1);
+                if tick_count % 5 == 1 {
+                    current_ping_ms = measure_ping();
+                }
+
+                // 5. Update the real-time structure
                 let stats = RealtimeStats {
                     download_speed,
                     upload_speed,
                     battery_percentage: battery_pct,
                     is_charging,
                     active_app: active_app.clone(),
+                    ping_ms: current_ping_ms,
                 };
                 
                 // Send real-time updates to UI

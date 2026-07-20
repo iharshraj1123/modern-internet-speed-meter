@@ -11,7 +11,14 @@ const DEFAULT_SETTINGS = {
     samplingRate: 1000,  // ms
     idleTimeout: 5,      // minutes
     batterySaver: true,  // disable on low battery
-    theme: 'system'      // 'system', 'dark', 'light'
+    theme: 'system',      // 'system', 'dark', 'light'
+    accentColor: 'emerald',
+    dailyLimitEnabled: false,
+    dailyLimitGB: 5,
+    monthlyLimitEnabled: false,
+    monthlyLimitGB: 50,
+    globalHotkey: 'Ctrl+Shift+S',
+    showPing: true
 };
 
 function createSettingsStore() {

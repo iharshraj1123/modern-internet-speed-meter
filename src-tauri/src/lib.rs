@@ -5,6 +5,7 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Manager, WebviewWindowBuilder, WebviewUrl, Emitter};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use once_cell::sync::Lazy;
 
 // Global SQLite connection path
@@ -17,8 +18,12 @@ static LATEST_STATS: Lazy<Mutex<telemetry::RealtimeStats>> = Lazy::new(|| {
         battery_percentage: 100,
         is_charging: true,
         active_app: "System".to_string(),
+        ping_ms: 0,
     })
 });
+// Track which data-limit alert thresholds have already been sent (to avoid spam)
+static ALERTED_THRESHOLDS: Lazy<Mutex<std::collections::HashSet<String>>> =
+    Lazy::new(|| Mutex::new(std::collections::HashSet::new()));
 
 // Tauri command: Get current real-time stats
 #[tauri::command]
@@ -31,7 +36,6 @@ fn get_realtime_stats() -> telemetry::RealtimeStats {
 async fn get_historical_stats(period: String) -> Result<Vec<db::ProcessStat>, String> {
     let path = DB_PATH.lock().unwrap().clone();
     if period == "clear" {
-        // Handle database reset request safely
         if let Ok(conn) = db::open_conn(&path) {
             let _ = conn.execute("DELETE FROM process_telemetry", []);
             let _ = conn.execute("DELETE FROM hourly_stats", []);
@@ -43,7 +47,7 @@ async fn get_historical_stats(period: String) -> Result<Vec<db::ProcessStat>, St
     db::get_stats_for_period(&conn, &period).map_err(|e| e.to_string())
 }
 
-// Tauri command: Toggle widget position lock (draggable vs fixed)
+// Tauri command: Toggle widget position lock
 #[tauri::command]
 async fn set_widget_locked(app: AppHandle, locked: bool) -> Result<(), String> {
     if let Some(w) = app.get_webview_window("main") {
@@ -100,15 +104,153 @@ async fn open_settings(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+// Tauri command: Get database info (size, row counts, retention settings)
+#[tauri::command]
+async fn get_db_info() -> Result<db::DbInfo, String> {
+    let path = DB_PATH.lock().unwrap().clone();
+    let conn = db::open_conn(&path).map_err(|e| e.to_string())?;
+    db::get_db_info(&conn, &path).map_err(|e| e.to_string())
+}
+
+// Tauri command: Update retention policy
+#[tauri::command]
+async fn set_retention_policy(raw_days: i64, hourly_days: i64) -> Result<(), String> {
+    let path = DB_PATH.lock().unwrap().clone();
+    let conn = db::open_conn(&path).map_err(|e| e.to_string())?;
+    db::set_retention_policy(&conn, raw_days, hourly_days).map_err(|e| e.to_string())
+}
+
+// Tauri command: Vacuum / optimize the database
+#[tauri::command]
+async fn vacuum_db() -> Result<(), String> {
+    let path = DB_PATH.lock().unwrap().clone();
+    let conn = db::open_conn(&path).map_err(|e| e.to_string())?;
+    db::vacuum_db(&conn).map_err(|e| e.to_string())
+}
+
+// Tauri command: Get today's total bandwidth usage in bytes
+#[tauri::command]
+async fn get_today_usage() -> Result<(u64, u64), String> {
+    let path = DB_PATH.lock().unwrap().clone();
+    let conn = db::open_conn(&path).map_err(|e| e.to_string())?;
+    db::get_today_total_bytes(&conn).map_err(|e| e.to_string())
+}
+
+// Tauri command: Get this month's total bandwidth usage in bytes
+#[tauri::command]
+async fn get_month_usage() -> Result<(u64, u64), String> {
+    let path = DB_PATH.lock().unwrap().clone();
+    let conn = db::open_conn(&path).map_err(|e| e.to_string())?;
+    db::get_month_total_bytes(&conn).map_err(|e| e.to_string())
+}
+
+// Tauri command: Check data limits and fire a notification if thresholds are crossed
+#[tauri::command]
+async fn check_data_limits(
+    app: AppHandle,
+    daily_limit_bytes: u64,
+    monthly_limit_bytes: u64,
+) -> Result<(), String> {
+    let path = DB_PATH.lock().unwrap().clone();
+    let conn = db::open_conn(&path).map_err(|e| e.to_string())?;
+
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+
+    if daily_limit_bytes > 0 {
+        let (dl, ul) = db::get_today_total_bytes(&conn).map_err(|e| e.to_string())?;
+        let total = dl + ul;
+        let pct = (total as f64 / daily_limit_bytes as f64 * 100.0) as u64;
+
+        for threshold in [100u64, 80] {
+            let key = format!("daily_{}_{}", threshold, today);
+            if pct >= threshold && !ALERTED_THRESHOLDS.lock().unwrap().contains(&key) {
+                ALERTED_THRESHOLDS.lock().unwrap().insert(key);
+                let msg = if threshold == 100 {
+                    "You have reached your daily data limit.".to_string()
+                } else {
+                    format!("You have used {}% of your daily data limit.", threshold)
+                };
+                let _ = tauri_plugin_notification::NotificationExt::notification(&app)
+                    .builder()
+                    .title("Data Limit Alert")
+                    .body(&msg)
+                    .show();
+                break;
+            }
+        }
+    }
+
+    if monthly_limit_bytes > 0 {
+        let (dl, ul) = db::get_month_total_bytes(&conn).map_err(|e| e.to_string())?;
+        let total = dl + ul;
+        let pct = (total as f64 / monthly_limit_bytes as f64 * 100.0) as u64;
+        let month = chrono::Local::now().format("%Y-%m").to_string();
+
+        for threshold in [100u64, 80] {
+            let key = format!("monthly_{}_{}", threshold, month);
+            if pct >= threshold && !ALERTED_THRESHOLDS.lock().unwrap().contains(&key) {
+                ALERTED_THRESHOLDS.lock().unwrap().insert(key);
+                let msg = if threshold == 100 {
+                    "You have reached your monthly data limit.".to_string()
+                } else {
+                    format!("You have used {}% of your monthly data limit.", threshold)
+                };
+                let _ = tauri_plugin_notification::NotificationExt::notification(&app)
+                    .builder()
+                    .title("Data Limit Alert")
+                    .body(&msg)
+                    .show();
+                break;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+// Tauri command: Register a global hotkey shortcut
+#[tauri::command]
+async fn register_hotkey(app: AppHandle, shortcut: String) -> Result<(), String> {
+    // Unregister all existing shortcuts first
+    let _ = app.global_shortcut().unregister_all();
+
+    let app_clone = app.clone();
+    app.global_shortcut()
+        .on_shortcut(shortcut.as_str(), move |_app, _shortcut, event| {
+            if event.state == ShortcutState::Pressed {
+                if let Some(w) = app_clone.get_webview_window("main") {
+                    if let Ok(visible) = w.is_visible() {
+                        if visible {
+                            let _ = w.hide();
+                        } else {
+                            let _ = w.show();
+                            let _ = w.set_focus();
+                        }
+                    }
+                }
+            }
+        })
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+// Tauri command: Unregister global hotkey
+#[tauri::command]
+async fn unregister_hotkey(app: AppHandle) -> Result<(), String> {
+    app.global_shortcut().unregister_all().map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Force rebuild to bundle updated icons
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec!["--start-minimized"]),
         ))
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             // 1. Setup SQLite Database in App Local Directory
             let app_dir = app.path().app_data_dir().unwrap();
@@ -120,7 +262,7 @@ pub fn run() {
 
             // Initialize SQLite schema
             let conn = db::init_db(&db_path).unwrap();
-            db::aggregate_data(&conn).ok(); // Initial aggregation run
+            db::aggregate_data(&conn).ok();
 
             // 2. Initialize Telemetry Service
             let (telemetry_service, mut stats_rx) = telemetry::TelemetryService::new(db_path);
@@ -130,14 +272,24 @@ pub fn run() {
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 while let Ok(stats) = stats_rx.recv().await {
-                    // Update global state cache
                     *LATEST_STATS.lock().unwrap() = stats.clone();
-                    // Emit update to all active webview windows
                     let _ = app_handle.emit("realtime-stats", stats);
                 }
             });
 
-            // 4. Construct Tray Icon & Menu
+            // 4. Register default global hotkey (Ctrl+Shift+S)
+            let app_handle2 = app.handle().clone();
+            let _ = app.global_shortcut().on_shortcut("Ctrl+Shift+S", move |_app, _shortcut, event| {
+                if event.state == ShortcutState::Pressed {
+                    if let Some(w) = app_handle2.get_webview_window("main") {
+                        if let Ok(visible) = w.is_visible() {
+                            if visible { let _ = w.hide(); } else { let _ = w.show(); let _ = w.set_focus(); }
+                        }
+                    }
+                }
+            });
+
+            // 5. Construct Tray Icon & Menu
             let toggle_widget = MenuItem::with_id(app, "toggle_widget", "Show/Hide Widget", true, None::<&str>).unwrap();
             let open_dash = MenuItem::with_id(app, "open_dashboard", "Open Dashboard", true, None::<&str>).unwrap();
             let open_set = MenuItem::with_id(app, "open_settings", "Settings", true, None::<&str>).unwrap();
@@ -216,7 +368,15 @@ pub fn run() {
             set_widget_locked,
             toggle_click_through,
             open_dashboard,
-            open_settings
+            open_settings,
+            get_db_info,
+            set_retention_policy,
+            vacuum_db,
+            get_today_usage,
+            get_month_usage,
+            check_data_limits,
+            register_hotkey,
+            unregister_hotkey,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

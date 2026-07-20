@@ -4,11 +4,13 @@
   import { listen } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { settings, formatSpeed } from "../../lib/settingsStore";
+  import { groupProcesses, getDisplayName } from "../../lib/processGroups";
 
   let period = $state("live"); // 'live', 'hourly', 'daily', 'weekly', 'monthly', 'yearly'
   let stats = $state([]);
   let loading = $state(true);
   let errorMsg = $state("");
+  let groupApps = $state(true);
 
   // Live tracking states
   let liveDownloadSpeed = $state(0);
@@ -21,16 +23,42 @@
 
   // Track live process session usage list
   let liveProcessList = $derived(
-    Object.entries(liveProcessMap)
-      .map(([name, val]) => ({
+    (() => {
+      const list = Object.entries(liveProcessMap).map(([name, val]) => ({
         process_name: name,
         bytes_downloaded: val.download,
         bytes_uploaded: val.upload,
         current_download_speed: val.current_down || 0,
         current_upload_speed: val.current_up || 0,
         screen_time_seconds: val.time
-      }))
-      .sort((a, b) => (b.bytes_downloaded + b.bytes_uploaded) - (a.bytes_downloaded + a.bytes_uploaded))
+      }));
+
+      if (!groupApps) {
+        return list.sort((a, b) => (b.bytes_downloaded + b.bytes_uploaded) - (a.bytes_downloaded + a.bytes_uploaded));
+      }
+
+      const grouped = {};
+      list.forEach(item => {
+        const displayName = getDisplayName(item.process_name);
+        if (!grouped[displayName]) {
+          grouped[displayName] = {
+            process_name: displayName,
+            bytes_downloaded: 0,
+            bytes_uploaded: 0,
+            current_download_speed: 0,
+            current_upload_speed: 0,
+            screen_time_seconds: 0
+          };
+        }
+        grouped[displayName].bytes_downloaded += item.bytes_downloaded;
+        grouped[displayName].bytes_uploaded += item.bytes_uploaded;
+        grouped[displayName].current_download_speed += item.current_download_speed;
+        grouped[displayName].current_upload_speed += item.current_upload_speed;
+        grouped[displayName].screen_time_seconds += item.screen_time_seconds;
+      });
+
+      return Object.values(grouped).sort((a, b) => (b.bytes_downloaded + b.bytes_uploaded) - (a.bytes_downloaded + a.bytes_uploaded));
+    })()
   );
 
   // Dynamic SVG path calculations for the live chart (width: 800, height: 120)
@@ -62,6 +90,8 @@
     });
     return `M 0,${height} L ${points.join(" L ")} L 800,${height} Z`;
   }
+
+  let groupedStats = $derived(groupApps ? groupProcesses(stats) : stats);
 
   // Calculate totals safely for database metrics
   let totalDownload = $derived(
@@ -207,6 +237,9 @@
       <p>Hourly, daily, and long-term telemetry metrics</p>
     </div>
     <div class="actions-group">
+      <button class="action-btn group-btn" class:active-group={groupApps} onclick={() => groupApps = !groupApps} title="Toggle process grouping by application name">
+        {groupApps ? "🔗 Grouped" : "⛓️ Individual"}
+      </button>
       <button class="action-btn settings-btn" onclick={openSettings} title="Open settings">
         ⚙️ Settings
       </button>
@@ -306,7 +339,7 @@
         <button class="action-btn" onclick={loadStats}>Retry</button>
       </div>
     {:else}
-      {@const activeList = period === 'live' ? liveProcessList : stats}
+      {@const activeList = period === 'live' ? liveProcessList : groupedStats}
       {#if activeList.length === 0}
         <div class="state-container empty">
           <p>📁 No activity recorded yet for this session/period.</p>
@@ -522,6 +555,12 @@
 
   .action-btn:hover {
     background: var(--btn-hover);
+  }
+
+  .active-group {
+    background: rgba(16, 185, 129, 0.15) !important;
+    border-color: rgba(16, 185, 129, 0.3) !important;
+    color: var(--accent-emerald) !important;
   }
 
   .close-btn {

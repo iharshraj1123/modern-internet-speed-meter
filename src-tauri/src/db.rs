@@ -12,7 +12,7 @@ pub fn open_conn<P: AsRef<Path>>(path: P) -> Result<Connection> {
 pub fn init_db<P: AsRef<Path>>(path: P) -> Result<Connection> {
     let conn = open_conn(path)?;
     
-    // 1. Raw telemetry table (5-minute chunks, kept for 7 days)
+    // 1. Raw telemetry table (5-minute chunks)
     conn.execute(
         "CREATE TABLE IF NOT EXISTS process_telemetry (
             timestamp INTEGER NOT NULL,
@@ -25,7 +25,7 @@ pub fn init_db<P: AsRef<Path>>(path: P) -> Result<Connection> {
         [],
     )?;
 
-    // 2. Hourly aggregated statistics (kept for 90 days)
+    // 2. Hourly aggregated statistics
     conn.execute(
         "CREATE TABLE IF NOT EXISTS hourly_stats (
             timestamp INTEGER NOT NULL,
@@ -47,6 +47,15 @@ pub fn init_db<P: AsRef<Path>>(path: P) -> Result<Connection> {
             bytes_uploaded INTEGER DEFAULT 0,
             screen_time_seconds INTEGER DEFAULT 0,
             PRIMARY KEY(date, process_name)
+        )",
+        [],
+    )?;
+
+    // 4. App settings key-value store
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS app_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
         )",
         [],
     )?;
@@ -91,10 +100,31 @@ pub fn log_interval(
 pub fn aggregate_data(conn: &Connection) -> Result<()> {
     let now = Local::now().timestamp();
     
+    // Read configurable retention days from app_settings (defaults: 7 days raw, 90 days hourly)
+    let raw_retention_days: i64 = conn
+        .query_row(
+            "SELECT value FROM app_settings WHERE key = 'raw_retention_days'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(7);
+
+    let hourly_retention_days: i64 = conn
+        .query_row(
+            "SELECT value FROM app_settings WHERE key = 'hourly_retention_days'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(90);
+
     // Round to start of current hour
     let current_hour = (now / 3600) * 3600;
     
-    // 1. Roll up raw 5-minute telemetry into hourly stats (for hours before the current one)
+    // 1. Roll up raw 5-minute telemetry into hourly stats
     conn.execute(
         "INSERT INTO hourly_stats (timestamp, process_name, bytes_downloaded, bytes_uploaded, screen_time_seconds)
          SELECT (timestamp / 3600) * 3600 AS hr, process_name, 
@@ -123,17 +153,17 @@ pub fn aggregate_data(conn: &Connection) -> Result<()> {
         [],
     )?;
 
-    // 3. Purge old raw data (older than 7 days) and hourly data (older than 90 days)
-    let seven_days_ago = now - (7 * 24 * 3600);
-    let ninety_days_ago = now - (90 * 24 * 3600);
+    // 3. Purge old data based on configurable retention policy
+    let raw_cutoff = now - (raw_retention_days * 24 * 3600);
+    let hourly_cutoff = now - (hourly_retention_days * 24 * 3600);
     
     conn.execute(
         "DELETE FROM process_telemetry WHERE timestamp < ?1",
-        params![seven_days_ago],
+        params![raw_cutoff],
     )?;
     conn.execute(
         "DELETE FROM hourly_stats WHERE timestamp < ?1",
-        params![ninety_days_ago],
+        params![hourly_cutoff],
     )?;
 
     Ok(())
@@ -233,4 +263,90 @@ pub fn get_stats_for_period(conn: &Connection, period: &str) -> Result<Vec<Proce
         stats.push(row?);
     }
     Ok(stats)
+}
+
+// --- New helpers for Data & Storage features ---
+
+#[derive(serde::Serialize)]
+pub struct DbInfo {
+    pub total_size_bytes: u64,
+    pub raw_rows: u64,
+    pub hourly_rows: u64,
+    pub daily_rows: u64,
+    pub raw_retention_days: i64,
+    pub hourly_retention_days: i64,
+}
+
+pub fn get_db_info<P: AsRef<Path>>(conn: &Connection, db_path: P) -> Result<DbInfo> {
+    let total_size_bytes = std::fs::metadata(db_path)
+        .map(|m| m.len())
+        .unwrap_or(0);
+
+    let raw_rows: u64 = conn.query_row(
+        "SELECT COUNT(*) FROM process_telemetry", [], |row| row.get(0)
+    ).unwrap_or(0);
+
+    let hourly_rows: u64 = conn.query_row(
+        "SELECT COUNT(*) FROM hourly_stats", [], |row| row.get(0)
+    ).unwrap_or(0);
+
+    let daily_rows: u64 = conn.query_row(
+        "SELECT COUNT(*) FROM daily_stats", [], |row| row.get(0)
+    ).unwrap_or(0);
+
+    let raw_retention_days: i64 = conn
+        .query_row("SELECT value FROM app_settings WHERE key = 'raw_retention_days'", [], |row| row.get::<_, String>(0))
+        .ok().and_then(|v| v.parse().ok()).unwrap_or(7);
+
+    let hourly_retention_days: i64 = conn
+        .query_row("SELECT value FROM app_settings WHERE key = 'hourly_retention_days'", [], |row| row.get::<_, String>(0))
+        .ok().and_then(|v| v.parse().ok()).unwrap_or(90);
+
+    Ok(DbInfo { total_size_bytes, raw_rows, hourly_rows, daily_rows, raw_retention_days, hourly_retention_days })
+}
+
+pub fn set_retention_policy(conn: &Connection, raw_days: i64, hourly_days: i64) -> Result<()> {
+    conn.execute(
+        "INSERT INTO app_settings (key, value) VALUES ('raw_retention_days', ?1)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        params![raw_days.to_string()],
+    )?;
+    conn.execute(
+        "INSERT INTO app_settings (key, value) VALUES ('hourly_retention_days', ?1)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        params![hourly_days.to_string()],
+    )?;
+    Ok(())
+}
+
+pub fn get_today_total_bytes(conn: &Connection) -> Result<(u64, u64)> {
+    let row: (u64, u64) = conn.query_row(
+        "SELECT COALESCE(SUM(bytes_downloaded), 0), COALESCE(SUM(bytes_uploaded), 0)
+         FROM process_telemetry
+         WHERE strftime('%Y-%m-%d', timestamp, 'unixepoch', 'localtime') = strftime('%Y-%m-%d', 'now', 'localtime')",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?))
+    ).unwrap_or((0, 0));
+    Ok(row)
+}
+
+pub fn get_month_total_bytes(conn: &Connection) -> Result<(u64, u64)> {
+    let row: (u64, u64) = conn.query_row(
+        "SELECT COALESCE(SUM(bytes_downloaded), 0), COALESCE(SUM(bytes_uploaded), 0) FROM (
+             SELECT bytes_downloaded, bytes_uploaded FROM daily_stats
+             WHERE date >= strftime('%Y-%m-%d', 'now', '-30 days', 'localtime')
+               AND date < strftime('%Y-%m-%d', 'now', 'localtime')
+             UNION ALL
+             SELECT bytes_downloaded, bytes_uploaded FROM process_telemetry
+             WHERE strftime('%Y-%m-%d', timestamp, 'unixepoch', 'localtime') = strftime('%Y-%m-%d', 'now', 'localtime')
+         )",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?))
+    ).unwrap_or((0, 0));
+    Ok(row)
+}
+
+pub fn vacuum_db(conn: &Connection) -> Result<()> {
+    conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE); VACUUM;")?;
+    Ok(())
 }
