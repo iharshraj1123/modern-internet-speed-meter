@@ -1,16 +1,8 @@
-use std::env;
-use std::fs;
-use std::path::PathBuf;
-
 fn main() {
-    if env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default() == "gnu" {
-        if let Ok(out_dir) = env::var("OUT_DIR") {
-            let wrapper_path = PathBuf::from(&out_dir).join("windres_wrapper.cmd");
-            let content = "@echo off\r\nwindres -F pe-x86-64 %*\r\n";
-            if fs::write(&wrapper_path, content).is_ok() {
-                env::set_var("WINDRES", wrapper_path.to_str().unwrap());
-            }
-        }
+    let mut attributes = tauri_build::Attributes::new();
+    if std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default() == "gnu" {
+        let windows = tauri_build::WindowsAttributes::new().window_icon_path(None as Option<&str>);
+        attributes = attributes.windows_attributes(windows);
     }
-    tauri_build::build();
+    tauri_build::try_build(attributes).expect("failed to run tauri-build script");
 }
