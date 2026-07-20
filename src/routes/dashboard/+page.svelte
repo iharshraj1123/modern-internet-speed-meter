@@ -18,6 +18,8 @@
   let liveActiveApp = $state("System");
   let liveHistory = $state({ download: Array(60).fill(0), upload: Array(60).fill(0) });
   let liveProcessMap = $state({});
+  let sortField = $state("total"); // 'name', 'live_down', 'live_up', 'download', 'upload', 'time', 'total', 'share'
+  let sortAscending = $state(false);
 
   let unlistenStats;
 
@@ -109,6 +111,63 @@
   let totalScreenTime = $derived(
     Array.isArray(stats) ? stats.reduce((acc, s) => acc + (s.screen_time_seconds || 0), 0) : 0
   );
+
+  let sortedList = $derived(
+    (() => {
+      const activeList = period === 'live' ? liveProcessList : groupedStats;
+      let list = [...activeList];
+      
+      list.sort((a, b) => {
+        let valA, valB;
+        switch (sortField) {
+          case 'name':
+            valA = (a.process_name || 'System').toLowerCase();
+            valB = (b.process_name || 'System').toLowerCase();
+            return sortAscending ? valA.localeCompare(valB) : valB.localeCompare(valA);
+          case 'live_down':
+            valA = a.current_download_speed || 0;
+            valB = b.current_download_speed || 0;
+            break;
+          case 'live_up':
+            valA = a.current_upload_speed || 0;
+            valB = b.current_upload_speed || 0;
+            break;
+          case 'download':
+            valA = a.bytes_downloaded || 0;
+            valB = b.bytes_downloaded || 0;
+            break;
+          case 'upload':
+            valA = a.bytes_uploaded || 0;
+            valB = b.bytes_uploaded || 0;
+            break;
+          case 'time':
+            valA = a.screen_time_seconds || 0;
+            valB = b.screen_time_seconds || 0;
+            break;
+          case 'share':
+          case 'total':
+          default:
+            valA = (a.bytes_downloaded || 0) + (a.bytes_uploaded || 0);
+            valB = (b.bytes_downloaded || 0) + (b.bytes_uploaded || 0);
+            break;
+        }
+        
+        if (valA < valB) return sortAscending ? -1 : 1;
+        if (valA > valB) return sortAscending ? 1 : -1;
+        return 0;
+      });
+      return list;
+    })()
+  );
+
+  function toggleSort(field) {
+    if (sortField === field) {
+      sortAscending = !sortAscending;
+    } else {
+      sortField = field;
+      sortAscending = field === 'name';
+    }
+  }
 
   async function loadStats() {
     if (period === "live") {
@@ -358,8 +417,7 @@
         <button class="action-btn" onclick={loadStats}>Retry</button>
       </div>
     {:else}
-      {@const activeList = period === 'live' ? liveProcessList : groupedStats}
-      {#if activeList.length === 0}
+      {#if sortedList.length === 0}
         <div class="state-container empty">
           <p>📁 No activity recorded yet for this session/period.</p>
           <small>Start loading pages or focusing windows to record statistics.</small>
@@ -369,19 +427,33 @@
           <table class="stats-table">
             <thead>
               <tr>
-                <th>Application</th>
+                <th onclick={() => toggleSort('name')} class="sortable">
+                  Application {sortField === 'name' ? (sortAscending ? '▲' : '▼') : ''}
+                </th>
                 {#if period === 'live'}
-                  <th>Live Down Speed</th>
-                  <th>Live Up Speed</th>
+                  <th onclick={() => toggleSort('live_down')} class="sortable">
+                    Live Down Speed {sortField === 'live_down' ? (sortAscending ? '▲' : '▼') : ''}
+                  </th>
+                  <th onclick={() => toggleSort('live_up')} class="sortable">
+                    Live Up Speed {sortField === 'live_up' ? (sortAscending ? '▲' : '▼') : ''}
+                  </th>
                 {/if}
-                <th>{period === 'live' ? 'Session Download' : 'Downloaded'}</th>
-                <th>{period === 'live' ? 'Session Upload' : 'Uploaded'}</th>
-                <th>Active Session Time</th>
-                <th>Share of Usage</th>
+                <th onclick={() => toggleSort('download')} class="sortable">
+                  {period === 'live' ? 'Session Download' : 'Downloaded'} {sortField === 'download' ? (sortAscending ? '▲' : '▼') : ''}
+                </th>
+                <th onclick={() => toggleSort('upload')} class="sortable">
+                  {period === 'live' ? 'Session Upload' : 'Uploaded'} {sortField === 'upload' ? (sortAscending ? '▲' : '▼') : ''}
+                </th>
+                <th onclick={() => toggleSort('time')} class="sortable">
+                  Active Session Time {sortField === 'time' ? (sortAscending ? '▲' : '▼') : ''}
+                </th>
+                <th onclick={() => toggleSort('share')} class="sortable">
+                  Share of Usage {sortField === 'share' ? (sortAscending ? '▲' : '▼') : ''}
+                </th>
               </tr>
             </thead>
             <tbody>
-              {#each activeList as item}
+              {#each sortedList as item}
                 {@const appTotal = (item.bytes_downloaded || 0) + (item.bytes_uploaded || 0)}
                 {@const pct = grandTotalBytes > 0 ? (appTotal / grandTotalBytes) * 100 : 0}
                 <tr>
@@ -729,6 +801,17 @@
     font-weight: 600;
     padding: 10px 14px;
     border-bottom: 1px solid var(--border-color);
+  }
+
+  .stats-table th.sortable {
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s, color 0.2s;
+  }
+
+  .stats-table th.sortable:hover {
+    background: var(--btn-hover);
+    color: var(--text-primary);
   }
 
   .stats-table td {
