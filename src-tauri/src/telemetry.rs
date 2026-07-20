@@ -19,7 +19,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINF
 use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, GetProcessIoCounters, IO_COUNTERS};
 use windows::Win32::System::ProcessStatus::{GetModuleFileNameExW, EnumProcesses};
 use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
-use windows::Win32::NetworkManagement::IpHelper::{GetIfTable2, FreeMibTable, MIB_IF_TABLE2};
+use windows::Win32::NetworkManagement::IpHelper::{GetIfTable2, FreeMibTable, MIB_IF_TABLE2, GetBestInterface};
 
 #[derive(serde::Serialize, Clone, Debug)]
 pub struct ProcessSpeed {
@@ -99,12 +99,26 @@ fn get_total_network_octets() -> (u64, u64) {
     let mut rx = 0;
     let mut tx = 0;
     unsafe {
+        // Query best interface index for IPv4 routing to public gateway (Cloudflare DNS 1.1.1.1)
+        let mut best_if_index = 0u32;
+        let mut target_index = None;
+        
+        // 0x01010101 is the big-endian u32 representation of 1.1.1.1
+        if GetBestInterface(0x01010101, &mut best_if_index) == 0 {
+            target_index = Some(best_if_index);
+        }
+
         let mut table: *mut MIB_IF_TABLE2 = std::ptr::null_mut();
         if GetIfTable2(&mut table).is_ok() {
             let slice = std::slice::from_raw_parts((*table).Table.as_ptr(), (*table).NumEntries as usize);
             for row in slice {
-                // Filter for operational physical interfaces (type 6=Ethernet, 71=WiFi, 23=Mobile, 244=WWAN)
-                if row.OperStatus.0 == 1 && (row.Type == 6 || row.Type == 71 || row.Type == 244 || row.Type == 23) {
+                // If target index is found, we match that exactly. Otherwise fall back to active physical filter.
+                let is_match = match target_index {
+                    Some(idx) => row.InterfaceIndex == idx,
+                    None => row.OperStatus.0 == 1 && (row.Type == 6 || row.Type == 71 || row.Type == 244 || row.Type == 23),
+                };
+
+                if is_match {
                     rx += row.InOctets;
                     tx += row.OutOctets;
                 }
