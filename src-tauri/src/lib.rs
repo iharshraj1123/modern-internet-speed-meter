@@ -105,6 +105,23 @@ async fn open_settings(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+// Tauri command: Hide main widget window
+#[tauri::command]
+async fn hide_widget(app: AppHandle) -> Result<(), String> {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.hide();
+    }
+    Ok(())
+}
+
+// Tauri command: Close application completely
+#[tauri::command]
+async fn close_app(app: AppHandle) -> Result<(), String> {
+    app.exit(0);
+    Ok(())
+}
+
+
 // Tauri command: Get database info (size, row counts, retention settings)
 #[tauri::command]
 async fn get_db_info() -> Result<db::DbInfo, String> {
@@ -370,6 +387,8 @@ pub fn run() {
             toggle_click_through,
             open_dashboard,
             open_settings,
+            hide_widget,
+            close_app,
             get_db_info,
             set_retention_policy,
             vacuum_db,

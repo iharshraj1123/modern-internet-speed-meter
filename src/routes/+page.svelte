@@ -96,9 +96,51 @@
       : 0
   );
 
+  // Context Menu State
+  let showContextMenu = $state(false);
+  let contextMenuPos = $state({ x: 0, y: 0 });
+
+  function handleContextMenu(event) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const menuWidth = 150;
+    const menuHeight = 140;
+    let x = event.clientX;
+    let y = event.clientY;
+
+    if (x + menuWidth > window.innerWidth) x = window.innerWidth - menuWidth - 4;
+    if (y + menuHeight > window.innerHeight) y = window.innerHeight - menuHeight - 4;
+
+    contextMenuPos = { x: Math.max(4, x), y: Math.max(4, y) };
+    showContextMenu = true;
+  }
+
+  function closeContextMenu() {
+    showContextMenu = false;
+  }
+
+  async function handleMenuAction(action) {
+    showContextMenu = false;
+    try {
+      if (action === "hide") {
+        await invoke("hide_widget");
+      } else if (action === "analytics") {
+        await invoke("open_dashboard");
+      } else if (action === "settings") {
+        await invoke("open_settings");
+      } else if (action === "close") {
+        await invoke("close_app");
+      }
+    } catch (e) {
+      console.error(`Failed to execute menu action: ${action}`, e);
+    }
+  }
+
   onMount(async () => {
-    // Disable right-click context menu
-    document.addEventListener("contextmenu", (e) => e.preventDefault());
+    // Custom context menu listener
+    document.addEventListener("contextmenu", handleContextMenu);
+    document.addEventListener("click", closeContextMenu);
 
     // 1. Fetch initial stats
     try {
@@ -175,6 +217,8 @@
   });
 
   onDestroy(() => {
+    document.removeEventListener("contextmenu", handleContextMenu);
+    document.removeEventListener("click", closeContextMenu);
     if (unlistenStats) unlistenStats();
   });
 
@@ -332,6 +376,39 @@
         <div class="quota-bar-fill" style="width: {Math.min(dailyUsagePct, 100)}%;"></div>
       </div>
     {/if}
+  </div>
+{/if}
+
+{#if showContextMenu}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div 
+    class="menu-backdrop" 
+    onclick={closeContextMenu} 
+    oncontextmenu={(e) => { e.preventDefault(); closeContextMenu(); }}
+  ></div>
+
+  <div 
+    class="custom-context-menu" 
+    style="top: {contextMenuPos.y}px; left: {contextMenuPos.x}px;" 
+    onclick={(e) => e.stopPropagation()}
+  >
+    <button class="menu-item" onclick={() => handleMenuAction('analytics')}>
+      <span class="menu-icon">📊</span>
+      <span>Analytics</span>
+    </button>
+    <button class="menu-item" onclick={() => handleMenuAction('settings')}>
+      <span class="menu-icon">⚙️</span>
+      <span>Settings</span>
+    </button>
+    <div class="menu-divider"></div>
+    <button class="menu-item" onclick={() => handleMenuAction('hide')}>
+      <span class="menu-icon">👁️</span>
+      <span>Hide App</span>
+    </button>
+    <button class="menu-item danger" onclick={() => handleMenuAction('close')}>
+      <span class="menu-icon">❌</span>
+      <span>Close</span>
+    </button>
   </div>
 {/if}
 
@@ -638,5 +715,82 @@
     bottom: 18px;
     width: 6px;
     cursor: w-resize;
+  }
+
+  /* Custom Right-Click Context Menu */
+  .menu-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 9998;
+    background: transparent;
+  }
+
+  .custom-context-menu {
+    position: fixed;
+    z-index: 9999;
+    width: 145px;
+    background: rgba(15, 23, 42, 0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    padding: 4px;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    animation: menuFadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  :global(html[data-theme="light"]) .custom-context-menu {
+    background: rgba(255, 255, 255, 0.94);
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.15);
+  }
+
+  @keyframes menuFadeIn {
+    from { opacity: 0; transform: scale(0.94); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  .menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 10px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: var(--text-color);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s, color 0.15s;
+    box-sizing: border-box;
+  }
+
+  .menu-item:hover {
+    background: var(--widget-hover-bg);
+  }
+
+  .menu-item.danger:hover {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+  }
+
+  .menu-icon {
+    font-size: 13px;
+    line-height: 1;
+  }
+
+  .menu-divider {
+    height: 1px;
+    background: var(--widget-border);
+    margin: 2px 4px;
   }
 </style>

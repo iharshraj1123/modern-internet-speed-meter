@@ -40,7 +40,7 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "target/release/WebView2Loader.dll"
+      "WebView2Loader.dll"
     ],
     "windows": {
       "webviewInstallMode": {
