@@ -1,7 +1,16 @@
 <script>
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { openUrl } from "@tauri-apps/plugin-opener";
   import { settings } from "../../lib/settingsStore";
+
+  async function visitDonationLink(url) {
+    try {
+      await openUrl(url);
+    } catch (e) {
+      console.error("Failed to open donation link", e);
+    }
+  }
 
   let activeTab = $state("general");
   let autostartEnabled = $state(false);
@@ -206,6 +215,14 @@
         onclick={() => activeTab = 'data'}
       >
         Data & Storage
+      </button>
+      <nav class="nav-divider"></nav>
+      <button 
+        class="nav-btn support-tab-btn" 
+        class:active={activeTab === 'support'} 
+        onclick={() => activeTab = 'support'}
+      >
+        ❤️ Support Us
       </button>
     </nav>
 
@@ -574,6 +591,48 @@
               <div class="success-alert">Database compaction and optimization completed!</div>
             {/if}
           {/if}
+        </section>
+      {:else if activeTab === 'support'}
+        <section class="section support-section">
+          <h2>Support the Developer</h2>
+          <p class="support-intro">
+            Internet Speed Meter is 100% free and open-source. If the app helps you monitor your bandwidth or customize your desktop, consider supporting its development!
+          </p>
+
+          <div class="donation-options">
+            <button class="donation-card bmac" onclick={() => visitDonationLink('https://buymeacoffee.com/')}>
+              <div class="donation-icon">☕</div>
+              <div class="donation-text">
+                <h3>Buy Me a Coffee</h3>
+                <span>Buy a coffee to support development updates</span>
+              </div>
+              <span class="donation-arrow">→</span>
+            </button>
+
+            <button class="donation-card github" onclick={() => visitDonationLink('https://github.com/sponsors/')}>
+              <div class="donation-icon">💖</div>
+              <div class="donation-text">
+                <h3>GitHub Sponsors</h3>
+                <span>Support monthly or via one-time sponsorship</span>
+              </div>
+              <span class="donation-arrow">→</span>
+            </button>
+
+            <button class="donation-card patreon" onclick={() => visitDonationLink('https://patreon.com/')}>
+              <div class="donation-icon">🧡</div>
+              <div class="donation-text">
+                <h3>Patreon</h3>
+                <span>Join our community of monthly supporters</span>
+              </div>
+              <span class="donation-arrow">→</span>
+            </button>
+          </div>
+
+          <div class="app-version-info">
+            <span class="version-label">Internet Speed Meter</span>
+            <span class="version-number">Version 1.0.0</span>
+            <span class="version-copy">Made with ❤️ for everyone</span>
+          </div>
         </section>
       {/if}
     </div>
@@ -1056,6 +1115,123 @@
 
   .action-btn-styled:hover {
     background: var(--btn-hover);
+  }
+
+  /* Support Us tab styling */
+  .support-intro {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+  }
+
+  .donation-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 24px;
+  }
+
+  .donation-card {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 12px 16px;
+    border-radius: 8px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    text-align: left;
+    cursor: pointer;
+    transition: transform 0.2s, border-color 0.2s, background 0.2s;
+    box-sizing: border-box;
+  }
+
+  .donation-card:hover {
+    transform: translateY(-2px);
+    background: var(--btn-hover);
+  }
+
+  .donation-card.bmac:hover {
+    border-color: #ffdd00;
+  }
+
+  .donation-card.github:hover {
+    border-color: #ff5a79;
+  }
+
+  .donation-card.patreon:hover {
+    border-color: #f96854;
+  }
+
+  .donation-icon {
+    font-size: 24px;
+    margin-right: 16px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .donation-text {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .donation-text h3 {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .donation-text span {
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
+  .donation-arrow {
+    font-size: 14px;
+    color: var(--text-secondary);
+    transition: transform 0.2s;
+  }
+
+  .donation-card:hover .donation-arrow {
+    transform: translateX(4px);
+    color: var(--text-primary);
+  }
+
+  .app-version-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-top: 1px solid var(--border-color);
+    padding-top: 20px;
+    gap: 4px;
+    color: var(--text-secondary);
+  }
+
+  .version-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  .version-number {
+    font-size: 10px;
+    font-weight: 500;
+    background: var(--btn-bg);
+    padding: 2px 8px;
+    border-radius: 20px;
+    border: 1px solid var(--btn-border);
+  }
+
+  .version-copy {
+    font-size: 10px;
+    color: var(--text-secondary);
   }
 </style>
 
