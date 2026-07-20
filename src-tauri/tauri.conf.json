@@ -39,6 +39,9 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": [
+      "target/release/WebView2Loader.dll"
+    ],
     "windows": {
       "webviewInstallMode": {
         "type": "embedBootstrapper"
