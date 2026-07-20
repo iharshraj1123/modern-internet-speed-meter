@@ -81,12 +81,22 @@
   $effect(() => {
     const accent = $settings.accentColor || "emerald";
     const colors = ACCENT_COLORS[accent] || ACCENT_COLORS.emerald;
-    
+    const op = $settings.opacity ?? 0.85;
+
     // Dynamically apply accent color to CSS variables on HTML element
     document.documentElement.style.setProperty('--metric-down', colors.dark);
     document.documentElement.style.setProperty('--accent-emerald', colors.dark);
     document.documentElement.style.setProperty('--widget-hover-border', `${colors.dark}55`);
     document.documentElement.style.setProperty('--chart-down-fill', `${colors.dark}22`);
+
+    // Solid background when opacity is set to 1.0 (or scaled linearly)
+    if ($settings.theme === 'light') {
+      document.documentElement.style.setProperty('--widget-bg', `rgba(255, 255, 255, ${op})`);
+      document.documentElement.style.setProperty('--widget-hover-bg', `rgba(255, 255, 255, ${Math.min(1.0, op + 0.05)})`);
+    } else {
+      document.documentElement.style.setProperty('--widget-bg', `rgba(10, 10, 12, ${op})`);
+      document.documentElement.style.setProperty('--widget-hover-bg', `rgba(15, 15, 18, ${Math.min(1.0, op + 0.05)})`);
+    }
   });
 
   // Calculate daily limit usage percentage
@@ -96,45 +106,10 @@
       : 0
   );
 
-  // Context Menu State
-  let showContextMenu = $state(false);
-  let contextMenuPos = $state({ x: 0, y: 0 });
-
   function handleContextMenu(event) {
     event.preventDefault();
     event.stopPropagation();
-
-    const menuWidth = 150;
-    const menuHeight = 140;
-    let x = event.clientX;
-    let y = event.clientY;
-
-    if (x + menuWidth > window.innerWidth) x = window.innerWidth - menuWidth - 4;
-    if (y + menuHeight > window.innerHeight) y = window.innerHeight - menuHeight - 4;
-
-    contextMenuPos = { x: Math.max(4, x), y: Math.max(4, y) };
-    showContextMenu = true;
-  }
-
-  function closeContextMenu() {
-    showContextMenu = false;
-  }
-
-  async function handleMenuAction(action) {
-    showContextMenu = false;
-    try {
-      if (action === "hide") {
-        await invoke("hide_widget");
-      } else if (action === "analytics") {
-        await invoke("open_dashboard");
-      } else if (action === "settings") {
-        await invoke("open_settings");
-      } else if (action === "close") {
-        await invoke("close_app");
-      }
-    } catch (e) {
-      console.error(`Failed to execute menu action: ${action}`, e);
-    }
+    invoke("show_context_menu");
   }
 
   onMount(async () => {
@@ -379,38 +354,7 @@
   </div>
 {/if}
 
-{#if showContextMenu}
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div 
-    class="menu-backdrop" 
-    onclick={closeContextMenu} 
-    oncontextmenu={(e) => { e.preventDefault(); closeContextMenu(); }}
-  ></div>
 
-  <div 
-    class="custom-context-menu" 
-    style="top: {contextMenuPos.y}px; left: {contextMenuPos.x}px;" 
-    onclick={(e) => e.stopPropagation()}
-  >
-    <button class="menu-item" onclick={() => handleMenuAction('analytics')}>
-      <span class="menu-icon">📊</span>
-      <span>Analytics</span>
-    </button>
-    <button class="menu-item" onclick={() => handleMenuAction('settings')}>
-      <span class="menu-icon">⚙️</span>
-      <span>Settings</span>
-    </button>
-    <div class="menu-divider"></div>
-    <button class="menu-item" onclick={() => handleMenuAction('hide')}>
-      <span class="menu-icon">👁️</span>
-      <span>Hide App</span>
-    </button>
-    <button class="menu-item danger" onclick={() => handleMenuAction('close')}>
-      <span class="menu-icon">❌</span>
-      <span>Close</span>
-    </button>
-  </div>
-{/if}
 
 <style>
   :global(html) {

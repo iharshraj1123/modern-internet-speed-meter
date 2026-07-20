@@ -136,6 +136,29 @@ async fn open_url(url: String) -> Result<(), String> {
     Ok(())
 }
 
+// Tauri command: Show native OS right-click context menu (unbounded by webview window)
+#[tauri::command]
+async fn show_context_menu(app: AppHandle) -> Result<(), String> {
+    if let Some(w) = app.get_webview_window("main") {
+        let open_dash = MenuItem::with_id(&app, "context_dashboard", "Analytics", true, None::<&str>).map_err(|e| e.to_string())?;
+        let open_set = MenuItem::with_id(&app, "context_settings", "Settings", true, None::<&str>).map_err(|e| e.to_string())?;
+        let sep = PredefinedMenuItem::separator(&app).map_err(|e| e.to_string())?;
+        let hide_app = MenuItem::with_id(&app, "context_hide", "Hide App", true, None::<&str>).map_err(|e| e.to_string())?;
+        let close_app = MenuItem::with_id(&app, "context_close", "Close App", true, None::<&str>).map_err(|e| e.to_string())?;
+
+        let context_menu = Menu::with_items(&app, &[
+            &open_dash,
+            &open_set,
+            &sep,
+            &hide_app,
+            &close_app,
+        ]).map_err(|e| e.to_string())?;
+
+        let _ = w.popup_menu(&context_menu);
+    }
+    Ok(())
+}
+
 
 // Tauri command: Get database info (size, row counts, retention settings)
 #[tauri::command]
@@ -381,19 +404,24 @@ pub fn run() {
                                 }
                             }
                         }
-                        "open_dashboard" => {
+                        "open_dashboard" | "context_dashboard" => {
                             let handle = app_handle.clone();
                             tauri::async_runtime::spawn(async move {
                                   let _ = open_dashboard(handle).await;
                             });
                         }
-                        "open_settings" => {
+                        "open_settings" | "context_settings" => {
                             let handle = app_handle.clone();
                             tauri::async_runtime::spawn(async move {
                                   let _ = open_settings(handle).await;
                             });
                         }
-                        "quit" => {
+                        "context_hide" => {
+                            if let Some(w) = app_handle.get_webview_window("main") {
+                                let _ = w.hide();
+                            }
+                        }
+                        "quit" | "context_close" => {
                             app_handle.exit(0);
                         }
                         _ => {}
@@ -413,6 +441,7 @@ pub fn run() {
             hide_widget,
             close_app,
             open_url,
+            show_context_menu,
             get_db_info,
             set_retention_policy,
             vacuum_db,
