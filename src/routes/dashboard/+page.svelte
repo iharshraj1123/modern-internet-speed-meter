@@ -161,8 +161,8 @@
             }
             liveProcessMap[app].download += p.download_speed;
             liveProcessMap[app].upload += p.upload_speed;
-            liveProcessMap[app].current_down = p.download_speed;
-            liveProcessMap[app].current_up = p.upload_speed;
+            liveProcessMap[app].current_down += p.download_speed;
+            liveProcessMap[app].current_up += p.upload_speed;
           });
         }
 

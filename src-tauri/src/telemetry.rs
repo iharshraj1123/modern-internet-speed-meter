@@ -293,6 +293,8 @@ impl TelemetryService {
                 let mut process_speeds = Vec::new();
 
                 if total_read_delta > 0 || total_write_delta > 0 {
+                    let mut speed_map: HashMap<String, (u64, u64)> = HashMap::new();
+
                     for (name, r_delta, w_delta) in active_io_procs {
                         let proc_down_speed = if total_read_delta > 0 {
                             (r_delta as f64 / total_read_delta as f64 * download_speed as f64) as u64
@@ -307,11 +309,9 @@ impl TelemetryService {
                         };
 
                         if proc_down_speed > 0 || proc_up_speed > 0 {
-                            process_speeds.push(ProcessSpeed {
-                                name: name.clone(),
-                                download_speed: proc_down_speed,
-                                upload_speed: proc_up_speed,
-                            });
+                            let speed_entry = speed_map.entry(name.clone()).or_insert((0, 0));
+                            speed_entry.0 += proc_down_speed;
+                            speed_entry.1 += proc_up_speed;
 
                             let entry = accumulator.entry(name).or_insert(ProcessStatsAccumulator {
                                 bytes_downloaded: 0,
@@ -321,6 +321,14 @@ impl TelemetryService {
                             entry.bytes_downloaded += proc_down_speed;
                             entry.bytes_uploaded += proc_up_speed;
                         }
+                    }
+
+                    for (name, (down, up)) in speed_map {
+                        process_speeds.push(ProcessSpeed {
+                            name,
+                            download_speed: down,
+                            upload_speed: up,
+                        });
                     }
                 } else if download_speed > 0 || upload_speed > 0 {
                     // Fallback: If no process was captured having I/O we attribute network speed to foreground
