@@ -93,6 +93,12 @@
 
   let groupedStats = $derived(groupApps ? groupProcesses(stats) : stats);
 
+  let grandTotalBytes = $derived(
+    period === 'live'
+      ? liveProcessList.reduce((acc, i) => acc + (i.bytes_downloaded || 0) + (i.bytes_uploaded || 0), 0)
+      : stats.reduce((acc, i) => acc + (i.bytes_downloaded || 0) + (i.bytes_uploaded || 0), 0)
+  );
+
   // Calculate totals safely for database metrics
   let totalDownload = $derived(
     Array.isArray(stats) ? stats.reduce((acc, s) => acc + (s.bytes_downloaded || 0), 0) : 0
@@ -156,6 +162,9 @@
         liveProcessMap[app].current_down = data.download_speed;
         liveProcessMap[app].current_up = data.upload_speed;
         liveProcessMap[app].time += 1;
+
+        // Force Svelte 5 reactivity refresh for liveProcessMap updates
+        liveProcessMap = { ...liveProcessMap };
       }
     });
   });
@@ -364,8 +373,7 @@
             <tbody>
               {#each activeList as item}
                 {@const appTotal = (item.bytes_downloaded || 0) + (item.bytes_uploaded || 0)}
-                {@const grandTotal = activeList.reduce((acc, i) => acc + (i.bytes_downloaded || 0) + (i.bytes_uploaded || 0), 0)}
-                {@const pct = grandTotal > 0 ? (appTotal / grandTotal) * 100 : 0}
+                {@const pct = grandTotalBytes > 0 ? (appTotal / grandTotalBytes) * 100 : 0}
                 <tr>
                   <td class="app-cell">
                     <span class="app-icon">💻</span>
