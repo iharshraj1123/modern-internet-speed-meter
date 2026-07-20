@@ -400,6 +400,12 @@
     font-size: 9px;
   }
 
+  @media (max-width: 189px) {
+    .battery {
+      display: none !important;
+    }
+  }
+
   .chart-container {
     width: 100%;
     margin-top: 4px;

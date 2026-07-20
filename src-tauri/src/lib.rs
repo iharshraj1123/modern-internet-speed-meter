@@ -66,8 +66,9 @@ async fn toggle_click_through(app: AppHandle, enabled: bool) -> Result<(), Strin
 #[tauri::command]
 async fn open_dashboard(app: AppHandle) -> Result<(), String> {
     if let Some(w) = app.get_webview_window("dashboard") {
-        w.show().unwrap();
-        w.set_focus().unwrap();
+        let _ = w.unminimize();
+        let _ = w.show();
+        let _ = w.set_focus();
     } else {
         let _dashboard = WebviewWindowBuilder::new(&app, "dashboard", WebviewUrl::App("/dashboard".into()))
             .title("Analytics Dashboard")
@@ -84,8 +85,9 @@ async fn open_dashboard(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 async fn open_settings(app: AppHandle) -> Result<(), String> {
     if let Some(w) = app.get_webview_window("settings") {
-        w.show().unwrap();
-        w.set_focus().unwrap();
+        let _ = w.unminimize();
+        let _ = w.show();
+        let _ = w.set_focus();
     } else {
         let _settings = WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App("/settings".into()))
             .title("Settings")

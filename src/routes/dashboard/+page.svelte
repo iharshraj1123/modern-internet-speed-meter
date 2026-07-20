@@ -26,6 +26,8 @@
         process_name: name,
         bytes_downloaded: val.download,
         bytes_uploaded: val.upload,
+        current_download_speed: val.current_down || 0,
+        current_upload_speed: val.current_up || 0,
         screen_time_seconds: val.time
       }))
       .sort((a, b) => (b.bytes_downloaded + b.bytes_uploaded) - (a.bytes_downloaded + a.bytes_uploaded))
@@ -109,11 +111,20 @@
       // If active app has any activity, log it to the live map
       if (period === "live") {
         const app = liveActiveApp;
+
+        // Reset instantaneous current speed across all processes
+        for (const key in liveProcessMap) {
+          liveProcessMap[key].current_down = 0;
+          liveProcessMap[key].current_up = 0;
+        }
+
         if (!liveProcessMap[app]) {
-          liveProcessMap[app] = { download: 0, upload: 0, time: 0 };
+          liveProcessMap[app] = { download: 0, upload: 0, time: 0, current_down: 0, current_up: 0 };
         }
         liveProcessMap[app].download += data.download_speed;
         liveProcessMap[app].upload += data.upload_speed;
+        liveProcessMap[app].current_down = data.download_speed;
+        liveProcessMap[app].current_up = data.upload_speed;
         liveProcessMap[app].time += 1;
       }
     });
@@ -307,8 +318,12 @@
             <thead>
               <tr>
                 <th>Application</th>
-                <th>{period === 'live' ? 'Download Speed' : 'Downloaded'}</th>
-                <th>{period === 'live' ? 'Upload Speed' : 'Uploaded'}</th>
+                {#if period === 'live'}
+                  <th>Live Down Speed</th>
+                  <th>Live Up Speed</th>
+                {/if}
+                <th>{period === 'live' ? 'Session Download' : 'Downloaded'}</th>
+                <th>{period === 'live' ? 'Session Upload' : 'Uploaded'}</th>
                 <th>Active Session Time</th>
                 <th>Share of Usage</th>
               </tr>
@@ -323,8 +338,12 @@
                     <span class="app-icon">💻</span>
                     <span class="app-title">{item.process_name || 'System'}</span>
                   </td>
-                  <td class="down-val">{period === 'live' ? formatSpeed(item.bytes_downloaded, $settings.unit) : formatVolume(item.bytes_downloaded)}</td>
-                  <td class="up-val">{period === 'live' ? formatSpeed(item.bytes_uploaded, $settings.unit) : formatVolume(item.bytes_uploaded)}</td>
+                  {#if period === 'live'}
+                    <td class="down-val">{formatSpeed(item.current_download_speed, $settings.unit)}</td>
+                    <td class="up-val">{formatSpeed(item.current_upload_speed, $settings.unit)}</td>
+                  {/if}
+                  <td class="down-val">{formatVolume(item.bytes_downloaded)}</td>
+                  <td class="up-val">{formatVolume(item.bytes_uploaded)}</td>
                   <td class="time-val">{formatDuration(item.screen_time_seconds)}</td>
                   <td class="share-cell">
                     <div class="progress-wrapper">
