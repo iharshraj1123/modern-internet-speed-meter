@@ -3,14 +3,6 @@ use std::net::TcpStream;
 use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
 use chrono::Local;
-use once_cell::sync::Lazy;
-
-static SELF_EXE_NAME: Lazy<String> = Lazy::new(|| {
-    std::env::current_exe()
-        .ok()
-        .and_then(|path| path.file_name().map(|f| f.to_string_lossy().into_owned()))
-        .unwrap_or_else(|| "tauri-app.exe".to_string())
-});
 
 
 use windows::Win32::Foundation::CloseHandle;
