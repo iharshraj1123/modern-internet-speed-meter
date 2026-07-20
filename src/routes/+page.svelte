@@ -48,22 +48,22 @@
 
   // Compute SVG path string from history
   function getPathData(history, height, maxVal) {
-    if (!maxVal || maxVal <= 0) maxVal = 1;
+    if (maxVal === 0) maxVal = 1;
     const points = history.map((val, idx) => {
       const x = (idx / (history.length - 1)) * 230; // SVG width is ~230
-      const y = (height - 3) - (val / maxVal) * (height - 6);
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
+      const y = height - (val / maxVal) * (height - 4);
+      return `${x},${y}`;
     });
     return `M ${points.join(" L ")}`;
   }
 
   // Compute SVG closed path for fill area
   function getAreaPathData(history, height, maxVal) {
-    if (!maxVal || maxVal <= 0) maxVal = 1;
+    if (maxVal === 0) maxVal = 1;
     const points = history.map((val, idx) => {
       const x = (idx / (history.length - 1)) * 230;
-      const y = (height - 3) - (val / maxVal) * (height - 6);
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
+      const y = height - (val / maxVal) * (height - 4);
+      return `${x},${y}`;
     });
     return `M 0,${height} L ${points.join(" L ")} L 230,${height} Z`;
   }
@@ -115,7 +115,6 @@
   onMount(async () => {
     // Custom context menu listener
     document.addEventListener("contextmenu", handleContextMenu);
-    document.addEventListener("click", closeContextMenu);
 
     // 1. Fetch initial stats
     try {
@@ -193,7 +192,6 @@
 
   onDestroy(() => {
     document.removeEventListener("contextmenu", handleContextMenu);
-    document.removeEventListener("click", closeContextMenu);
     if (unlistenStats) unlistenStats();
   });
 
