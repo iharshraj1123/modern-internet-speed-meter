@@ -50,3 +50,12 @@ To bundle the application into a standalone Windows installer or executable:
    npm run tauri build
    ```
    The compiled assets and installer will be located in `src-tauri/target/release/bundle/`.
+
+## 📜 License
+
+This project is licensed under the **Source-Available Public License (NC-SA + Attribution)** - see the [LICENSE](LICENSE) file for full details:
+- **Open Source / Share-Alike:** Derivative works must remain open source under the same license terms.
+- **Non-Commercial:** Free for personal use. Commercial sale or redistribution is prohibited.
+- **Support Links:** Original author attribution and donation/support links must remain intact in all derivative works.
+- **No Liability:** Provided "AS IS" without warranty of any kind.
+
