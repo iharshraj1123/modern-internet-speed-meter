@@ -1,0 +1,41 @@
+# Node / SvelteKit / Build output
+node_modules/
+.svelte-kit/
+/build/
+/dist/
+.env
+.env.*
+!.env.example
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# Rust / Cargo / Tauri
+src-tauri/target/
+src-tauri/gen/
+
+# SQLite databases / logs
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+speed_meter.db
+
+# OS files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# IDEs / Personal settings
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Temporary installer files / toolchains downloaded
+vs_buildtools.exe
+w64devkit/
+w64devkit.zip

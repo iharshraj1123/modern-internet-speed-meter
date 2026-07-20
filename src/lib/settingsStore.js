@@ -1,0 +1,124 @@
+import { writable } from 'svelte/store';
+import { invoke } from '@tauri-apps/api/core';
+
+// Settings defaults
+const DEFAULT_SETTINGS = {
+    unit: 'B',           // 'iB', 'B', 'b'
+    graphType: 'combined', // 'combined', 'separate', 'hidden'
+    opacity: 0.85,       // 0.1 to 1.0
+    locked: false,       // position locked (disable drag)
+    clickThrough: false, // click-through mode
+    samplingRate: 1000,  // ms
+    idleTimeout: 5,      // minutes
+    batterySaver: true,  // disable on low battery
+    theme: 'system'      // 'system', 'dark', 'light'
+};
+
+function createSettingsStore() {
+    // Load from localStorage if present
+    let initial = { ...DEFAULT_SETTINGS };
+    if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem('speed_meter_settings');
+        if (stored) {
+            try {
+                initial = { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
+            } catch (e) {
+                console.error("Failed to parse settings", e);
+            }
+        }
+    }
+
+    const store = writable(initial);
+    const { subscribe, set, update } = store;
+
+    if (typeof window !== 'undefined') {
+        subscribe(value => {
+            if (value && value.theme) {
+                document.documentElement.setAttribute('data-theme', value.theme);
+            }
+        });
+
+        // Sync settings dynamically across multiple WebView2 windows using standard storage events
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'speed_meter_settings' && e.newValue) {
+                try {
+                    const parsed = JSON.parse(e.newValue);
+                    store.set({ ...DEFAULT_SETTINGS, ...parsed });
+                } catch (err) {
+                    console.error("Failed to sync store from storage event", err);
+                }
+            }
+        });
+    }
+
+    return {
+        subscribe,
+        set: (value) => {
+            if (typeof window !== 'undefined') {
+                localStorage.setItem('speed_meter_settings', JSON.stringify(value));
+            }
+            set(value);
+        },
+        update: (updater) => {
+            update(current => {
+                const next = updater(current);
+                if (typeof window !== 'undefined') {
+                    localStorage.setItem('speed_meter_settings', JSON.stringify(next));
+                }
+                return next;
+            });
+        },
+        // Sync specific settings with Rust backend
+        syncWithBackend: async (settings) => {
+            try {
+                await invoke('set_widget_locked', { locked: settings.locked });
+                await invoke('toggle_click_through', { enabled: settings.clickThrough });
+            } catch (e) {
+                console.error("Backend sync failed", e);
+            }
+        }
+    };
+}
+
+export const settings = createSettingsStore();
+
+// Utility for speed formatting
+export function formatSpeed(bytesPerSec, unitType) {
+    if (bytesPerSec === undefined || isNaN(bytesPerSec)) return '0 B/s';
+
+    if (unitType === 'b') {
+        // Bits/sec (decimal)
+        const bits = bytesPerSec * 8;
+        if (bits < 1000) return `${bits.toFixed(0)} bps`;
+        const kbps = bits / 1000;
+        if (kbps < 1000) return `${kbps.toFixed(1)} Kbps`;
+        const mbps = kbps / 1000;
+        if (mbps < 1000) return `${mbps.toFixed(1)} Mbps`;
+        return `${(mbps / 1000).toFixed(1)} Gbps`;
+    } else if (unitType === 'ib') {
+        // Binary Bits/sec (kibps, mibps)
+        const bits = bytesPerSec * 8;
+        if (bits < 1024) return `${bits.toFixed(0)} bps`;
+        const kibps = bits / 1024;
+        if (kibps < 1024) return `${kibps.toFixed(1)} Kibps`;
+        const mibps = kibps / 1024;
+        if (mibps < 1024) return `${mibps.toFixed(1)} Mibps`;
+        return `${(mibps / 1024).toFixed(1)} Gibps`;
+    } else if (unitType === 'iB') {
+        // Binary Bytes/sec (KiB, MiB)
+        if (bytesPerSec < 1024) return `${bytesPerSec.toFixed(0)} B/s`;
+        const kib = bytesPerSec / 1024;
+        if (kib < 1024) return `${kib.toFixed(1)} KiB/s`;
+        const mib = kib / 1024;
+        if (mib < 1024) return `${mib.toFixed(1)} MiB/s`;
+        return `${(mib / 1024).toFixed(1)} GiB/s`;
+    } else {
+        // Decimal Bytes/sec (KB, MB) - DEFAULT
+        if (bytesPerSec < 1000) return `${bytesPerSec.toFixed(0)} B/s`;
+        const kb = bytesPerSec / 1000;
+        if (kb < 1000) return `${kb.toFixed(1)} KB/s`;
+        const mb = kb / 1000;
+        if (mb < 1000) return `${mb.toFixed(1)} MB/s`;
+        return `${(mb / 1000).toFixed(1)} GB/s`;
+    }
+}
