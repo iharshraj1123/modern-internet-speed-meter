@@ -59,5 +59,6 @@ We may update our Privacy Policy from time to time. Any changes will be reflecte
 ---
 
 ## 8. Contact Us
-If you have any questions or suggestions regarding this Privacy Policy, please feel free to reach out via GitHub or Ko-fi:
+If you have any questions or suggestions regarding this Privacy Policy, please feel free to reach out via Reddit or Ko-fi:
+* **Reddit:** [https://www.reddit.com/user/dekkeroid/](https://www.reddit.com/user/dekkeroid/)
 * **Developer Support / Feedback:** [https://ko-fi.com/dekki](https://ko-fi.com/dekki)
