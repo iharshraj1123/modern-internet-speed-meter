@@ -6,6 +6,7 @@ use tauri::{AppHandle, Manager, WebviewWindowBuilder, WebviewUrl, Emitter};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+use tauri_plugin_autostart::ManagerExt;
 use once_cell::sync::Lazy;
 
 // Global SQLite connection path
@@ -118,6 +119,20 @@ async fn hide_widget(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 async fn close_app(app: AppHandle) -> Result<(), String> {
     app.exit(0);
+    Ok(())
+}
+
+// Tauri command: Open URL in default system browser without cmd flash
+#[tauri::command]
+async fn open_url(url: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        let _ = std::process::Command::new("cmd")
+            .args(["/C", "start", "", &url])
+            .creation_flags(0x08000000) // CREATE_NO_WINDOW
+            .spawn();
+    }
     Ok(())
 }
 
@@ -270,6 +285,14 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
+            // Enable autostart with PC by default on first launch
+            let autostart_manager = app.autolaunch();
+            if let Ok(enabled) = autostart_manager.is_enabled() {
+                if !enabled {
+                    let _ = autostart_manager.enable();
+                }
+            }
+
             // 1. Setup SQLite Database in App Local Directory
             let app_dir = app.path().app_data_dir().unwrap();
             std::fs::create_dir_all(&app_dir).unwrap();
@@ -389,6 +412,7 @@ pub fn run() {
             open_settings,
             hide_widget,
             close_app,
+            open_url,
             get_db_info,
             set_retention_policy,
             vacuum_db,

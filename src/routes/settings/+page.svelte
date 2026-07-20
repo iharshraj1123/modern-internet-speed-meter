@@ -6,9 +6,14 @@
 
   async function visitDonationLink(url) {
     try {
-      await openUrl(url);
+      await invoke("open_url", { url });
     } catch (e) {
-      console.error("Failed to open donation link", e);
+      console.error("Failed to open link", e);
+      try {
+        await openUrl(url);
+      } catch (err) {
+        window.open(url, "_blank");
+      }
     }
   }
 
@@ -600,29 +605,11 @@
           </p>
 
           <div class="donation-options">
-            <button class="donation-card bmac" onclick={() => visitDonationLink('https://buymeacoffee.com/')}>
+            <button class="donation-card kofi" onclick={() => visitDonationLink('https://ko-fi.com/dekki')}>
               <div class="donation-icon">☕</div>
               <div class="donation-text">
-                <h3>Buy Me a Coffee</h3>
-                <span>Buy a coffee to support development updates</span>
-              </div>
-              <span class="donation-arrow">→</span>
-            </button>
-
-            <button class="donation-card github" onclick={() => visitDonationLink('https://github.com/sponsors/')}>
-              <div class="donation-icon">💖</div>
-              <div class="donation-text">
-                <h3>GitHub Sponsors</h3>
-                <span>Support monthly or via one-time sponsorship</span>
-              </div>
-              <span class="donation-arrow">→</span>
-            </button>
-
-            <button class="donation-card patreon" onclick={() => visitDonationLink('https://patreon.com/')}>
-              <div class="donation-icon">🧡</div>
-              <div class="donation-text">
-                <h3>Patreon</h3>
-                <span>Join our community of monthly supporters</span>
+                <h3>Support on Ko-fi</h3>
+                <span>Support development at ko-fi.com/dekki</span>
               </div>
               <span class="donation-arrow">→</span>
             </button>
@@ -1151,16 +1138,12 @@
     background: var(--btn-hover);
   }
 
-  .donation-card.bmac:hover {
-    border-color: #ffdd00;
+  .donation-card.kofi:hover {
+    border-color: #ff5e5b;
   }
 
   .donation-card.github:hover {
     border-color: #ff5a79;
-  }
-
-  .donation-card.patreon:hover {
-    border-color: #f96854;
   }
 
   .donation-icon {
