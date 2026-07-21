@@ -571,6 +571,7 @@
     stroke-width: 1.5;
     transition: d 0.1s ease;
     pointer-events: none;
+    vector-effect: non-scaling-stroke;
   }
 
   .down-line {
