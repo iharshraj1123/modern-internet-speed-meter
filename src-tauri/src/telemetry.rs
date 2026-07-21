@@ -281,7 +281,10 @@ const KERNEL_NETWORK_PROVIDER_GUID: GUID = GUID::from_u128(0x7dd42a49_5329_4832_
 pub fn set_telemetry_engine(engine: &str) {
     match engine {
         "io" => TELEMETRY_ENGINE_MODE.store(0, Ordering::Relaxed),
-        "etw" => TELEMETRY_ENGINE_MODE.store(2, Ordering::Relaxed),
+        "etw" => {
+            TELEMETRY_ENGINE_MODE.store(2, Ordering::Relaxed);
+            ensure_etw_tracer_running();
+        },
         _ => TELEMETRY_ENGINE_MODE.store(1, Ordering::Relaxed),
     }
 }

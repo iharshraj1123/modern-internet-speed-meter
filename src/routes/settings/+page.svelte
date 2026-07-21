@@ -108,6 +108,10 @@
   async function confirmRestartAsAdmin() {
     showEtwModal = false;
     try {
+      updateSetting("telemetryEngine", "etw");
+      updateSetting("useEtwTelemetry", true);
+      await settings.syncWithBackend({ ...$settings, telemetryEngine: "etw", useEtwTelemetry: true });
+      await invoke("set_telemetry_engine", { engine: "etw" });
       await invoke("restart_as_admin");
     } catch (err) {
       console.error("Failed to restart as Admin", err);
