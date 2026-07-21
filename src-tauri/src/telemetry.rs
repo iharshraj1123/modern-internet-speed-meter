@@ -123,6 +123,34 @@ pub fn is_elevated() -> bool {
     false
 }
 
+/// Relaunch the application with Administrator privileges via UAC prompt ("runas").
+pub fn restart_as_admin() -> Result<(), String> {
+    unsafe {
+        use windows::core::PCWSTR;
+        use windows::Win32::UI::Shell::ShellExecuteW;
+        use windows::Win32::UI::WindowsAndMessaging::SW_SHOW;
+
+        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        let exe_wide: Vec<u16> = exe.to_string_lossy().encode_utf16().chain(std::iter::once(0)).collect();
+        let verb_wide: Vec<u16> = "runas".encode_utf16().chain(std::iter::once(0)).collect();
+
+        let res = ShellExecuteW(
+            None,
+            PCWSTR(verb_wide.as_ptr()),
+            PCWSTR(exe_wide.as_ptr()),
+            PCWSTR(std::ptr::null()),
+            PCWSTR(std::ptr::null()),
+            SW_SHOW,
+        );
+
+        if (res.0 as usize) > 32 {
+            std::process::exit(0);
+        } else {
+            Err("UAC elevation prompt was cancelled or failed".to_string())
+        }
+    }
+}
+
 /// Return the executable filename of the current foreground window's process.
 fn get_active_process_name() -> String {
     unsafe {

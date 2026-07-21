@@ -58,6 +58,25 @@
   });
 
   let isElevated = $state(false);
+  let showEtwModal = $state(false);
+
+  function handleEtwToggle(e) {
+    const checked = e.target.checked;
+    updateSetting("useEtwTelemetry", checked);
+    if (checked && !isElevated) {
+      showEtwModal = true;
+    }
+  }
+
+  async function confirmRestartAsAdmin() {
+    showEtwModal = false;
+    try {
+      await invoke("restart_as_admin");
+    } catch (err) {
+      console.error("Failed to restart as Admin", err);
+      alert("Elevation cancelled or failed: " + err);
+    }
+  }
 
   onMount(async () => {
     try {
@@ -581,7 +600,15 @@
                   {#if isElevated}
                     <span style="color: var(--accent-emerald);">Admin Active — ETW Operational</span>
                   {:else}
-                    <span style="color: var(--accent-yellow);">Requires Run as Administrator on launch for ETW</span>
+                    <span style="color: var(--accent-yellow);">
+                      Requires Administrator rights. 
+                      <button 
+                        style="background: none; border: none; color: var(--accent-emerald); text-decoration: underline; cursor: pointer; padding: 0; font-weight: 700;"
+                        onclick={confirmRestartAsAdmin}
+                      >
+                        Restart as Admin now
+                      </button>
+                    </span>
                   {/if}
                 </div>
               {/if}
@@ -591,7 +618,7 @@
                 id="useEtwTelemetry" 
                 type="checkbox" 
                 checked={$settings.useEtwTelemetry ?? false} 
-                onchange={(e) => updateSetting("useEtwTelemetry", e.target.checked)} 
+                onchange={handleEtwToggle} 
               />
               <span class="slider"></span>
             </label>
@@ -777,6 +804,21 @@
     </div>
   </div>
 </main>
+
+{#if showEtwModal}
+  <div class="modal-backdrop" onclick={(e) => { if (e.target === e.currentTarget) showEtwModal = false; }}>
+    <div class="speedtest-modal" style="max-width: 440px; padding: 24px; text-align: center;">
+      <h3 style="margin-top: 0; font-size: 16px; font-weight: 700; color: var(--text-primary);">Administrator Rights Required</h3>
+      <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin: 12px 0 20px 0;">
+        Enabling ETW Kernel Tracing requires Administrator privileges to monitor system network events. Would you like to restart Internet Speed Meter as Administrator now?
+      </p>
+      <div style="display: flex; gap: 10px; justify-content: center;">
+        <button class="action-btn" onclick={() => showEtwModal = false}>Keep Current (Non-Admin)</button>
+        <button class="action-btn run-test-btn" onclick={confirmRestartAsAdmin}>Restart as Admin</button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style>
   :global(html) {

@@ -40,6 +40,12 @@ fn is_process_elevated() -> bool {
     telemetry::is_elevated()
 }
 
+// Tauri command: Relaunch application with Administrator privileges via UAC prompt
+#[tauri::command]
+fn restart_as_admin() -> Result<(), String> {
+    telemetry::restart_as_admin()
+}
+
 // Tauri command: Get historical telemetry metrics (hourly, daily, weekly, monthly, yearly)
 #[tauri::command]
 async fn get_historical_stats(period: String) -> Result<Vec<db::ProcessStat>, String> {
@@ -459,6 +465,7 @@ pub fn run() {
             unregister_hotkey,
             speedtest::run_speed_test,
             is_process_elevated,
+            restart_as_admin,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
