@@ -786,6 +786,10 @@
                   </div>
                 </div>
 
+                <div style="margin: 8px 0 12px 0; padding: 8px 12px; background: rgba(0, 0, 0, 0.25); border-radius: 6px; font-family: monospace; font-size: 11px; color: var(--accent-emerald); border: 1px solid var(--border-color);">
+                  <strong>ETW Kernel Status Log:</strong> {info.etw_status_log || "No log status available"}
+                </div>
+
                 {#if info.raw_etw_pid_samples && info.raw_etw_pid_samples.length > 0}
                   <h5 style="margin: 10px 0 6px 0; font-size: 12px; color: var(--text-primary);">
                     Active Captured Processes at {activeDebugEntry.time} ({info.active_etw_pids})

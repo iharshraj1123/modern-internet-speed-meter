@@ -194,8 +194,17 @@ static LAST_DEBUG_INFO: Lazy<Mutex<TelemetryDebugInfo>> = Lazy::new(|| {
         nic_tx_bytes_last_sec: 0,
         active_etw_pids: 0,
         raw_etw_pid_samples: Vec::new(),
+        etw_status_log: "ETW Not Started".to_string(),
     })
 });
+
+static ETW_STATUS_LOG: Lazy<Mutex<String>> = Lazy::new(|| Mutex::new("ETW Not Started".to_string()));
+
+fn log_etw_status(msg: &str) {
+    if let Ok(mut lock) = ETW_STATUS_LOG.lock() {
+        *lock = format!("[{}] {}", Local::now().format("%H:%M:%S"), msg);
+    }
+}
 
 #[derive(serde::Serialize, Clone, Debug)]
 pub struct TelemetryDebugInfo {
@@ -209,6 +218,7 @@ pub struct TelemetryDebugInfo {
     pub nic_tx_bytes_last_sec: u64,
     pub active_etw_pids: usize,
     pub raw_etw_pid_samples: Vec<(u32, String, u64, u64)>,
+    pub etw_status_log: String,
 }
 
 pub fn get_telemetry_debug_info() -> TelemetryDebugInfo {
@@ -226,6 +236,7 @@ pub fn get_telemetry_debug_info() -> TelemetryDebugInfo {
             nic_tx_bytes_last_sec: 0,
             active_etw_pids: 0,
             raw_etw_pid_samples: Vec::new(),
+            etw_status_log: ETW_STATUS_LOG.lock().map(|s| s.clone()).unwrap_or_default(),
         }
     }
 }
@@ -302,6 +313,7 @@ pub fn ensure_etw_tracer_running() {
 
 fn run_etw_session() {
     unsafe {
+        log_etw_status("Initializing ETW session...");
         let session_name_raw = format!("ISM_ETW_{}\0", std::process::id());
         let session_name_w: Vec<u16> = session_name_raw.encode_utf16().collect();
         
@@ -333,11 +345,14 @@ fn run_etw_session() {
         }
 
         if status.is_err() || handle_out.Value == 0 {
+            log_etw_status(&format!("StartTraceW failed: status={:?}, handle=0x{:x}", status, handle_out.Value));
             ETW_ACTIVE.store(false, Ordering::Relaxed);
             return;
         }
 
-        let _ = EnableTraceEx2(
+        log_etw_status(&format!("StartTraceW OK! Handle: 0x{:x}", handle_out.Value));
+
+        let enable_res = EnableTraceEx2(
             handle_out,
             &KERNEL_NETWORK_PROVIDER_GUID,
             EVENT_CONTROL_CODE_ENABLE_PROVIDER.0,
@@ -348,24 +363,39 @@ fn run_etw_session() {
             None,
         );
 
+        if enable_res.is_err() {
+            log_etw_status(&format!("EnableTraceEx2 failed: {:?}", enable_res));
+        } else {
+            log_etw_status("EnableTraceEx2 OK! Attached Kernel Network Provider");
+        }
+
         let mut logfile = EVENT_TRACE_LOGFILEW::default();
         logfile.LoggerName = windows::core::PWSTR(session_name_w.as_ptr() as *mut _);
         logfile.Anonymous1.ProcessTraceMode = PROCESS_TRACE_MODE_REAL_TIME | PROCESS_TRACE_MODE_EVENT_RECORD;
         logfile.Anonymous2.EventRecordCallback = Some(etw_event_callback);
 
         let trace_handle = OpenTraceW(&mut logfile);
-        if trace_handle.Value != 0 && trace_handle.Value != u64::MAX {
-            let handles = [trace_handle];
-            while (get_telemetry_engine_mode() == 2) && is_elevated() {
-                let status = ProcessTrace(&handles, None, None);
-                if status.is_err() {
-                    break;
-                }
-            }
-            let _ = CloseTrace(trace_handle);
+        if trace_handle.Value == 0 || trace_handle.Value == u64::MAX {
+            log_etw_status(&format!("OpenTraceW failed: handle=0x{:x}", trace_handle.Value));
+            let _ = ControlTraceW(handle_out, windows::core::PCWSTR(session_name_w.as_ptr()), props, EVENT_TRACE_CONTROL_STOP);
+            ETW_ACTIVE.store(false, Ordering::Relaxed);
+            return;
         }
+
+        log_etw_status(&format!("OpenTraceW OK! TraceHandle: 0x{:x}. Listening for packets...", trace_handle.Value));
+
+        let handles = [trace_handle];
+        while (get_telemetry_engine_mode() == 2) && is_elevated() {
+            let proc_res = ProcessTrace(&handles, None, None);
+            if proc_res.is_err() {
+                log_etw_status(&format!("ProcessTrace exited with status: {:?}", proc_res));
+                break;
+            }
+        }
+        let _ = CloseTrace(trace_handle);
         
         let _ = ControlTraceW(handle_out, windows::core::PCWSTR(session_name_w.as_ptr()), props, EVENT_TRACE_CONTROL_STOP);
+        log_etw_status("ETW Session stopped cleanly");
         ETW_ACTIVE.store(false, Ordering::Relaxed);
     }
 }
@@ -1021,6 +1051,7 @@ impl TelemetryService {
                     guard.nic_tx_bytes_last_sec = tx_diff;
                     guard.active_etw_pids = pid_rx_delta.len();
                     guard.raw_etw_pid_samples = debug_samples;
+                    guard.etw_status_log = ETW_STATUS_LOG.lock().map(|s| s.clone()).unwrap_or_default();
                 }
 
                 // ── 3. Active foreground app & screen-time tracking ──────────
