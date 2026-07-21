@@ -364,10 +364,12 @@ fn run_etw_session() {
         let mut buffer = vec![0u8; props_size];
         let props = buffer.as_mut_ptr() as *mut EVENT_TRACE_PROPERTIES;
         
+        const EVENT_TRACE_SYSTEM_LOGGER_MODE: u32 = 0x02000000;
+
         (*props).Wnode.BufferSize = props_size as u32;
         (*props).Wnode.Flags = 0x00020000; // WNODE_FLAG_TRACED_GUID
         (*props).LoggerNameOffset = header_size as u32;
-        (*props).LogFileMode = EVENT_TRACE_REAL_TIME_MODE;
+        (*props).LogFileMode = EVENT_TRACE_REAL_TIME_MODE | EVENT_TRACE_SYSTEM_LOGGER_MODE;
         (*props).FlushTimer = 1; // Flush ETW real-time buffers every 1 second!
         
         // Copy the UTF-16 session name into the buffer immediately following EVENT_TRACE_PROPERTIES struct
@@ -477,10 +479,13 @@ unsafe extern "system" fn etw_event_callback(event_record: *mut EVENT_RECORD) {
     };
 
     let id = record.EventHeader.EventDescriptor.Id;
-    // RX Event IDs: 11 (TCP v4 Recv), 13 (TCP v4 Retransmit), 15 (TCP v6 Recv), 43 (UDP v4 Recv), 45 (UDP v6 Recv)
-    let is_rx = id == 11 || id == 13 || id == 15 || id == 43 || id == 45;
-    // TX Event IDs: 10 (TCP v4 Send), 12 (TCP v4 Disconnect), 14 (TCP v6 Send), 42 (UDP v4 Send), 44 (UDP v6 Send)
-    let is_tx = id == 10 || id == 12 || id == 14 || id == 42 || id == 44;
+    // Microsoft-Windows-Kernel-Network Event IDs:
+    // 10 = TCP IPv4 Send, 11 = TCP IPv4 Recv
+    // 12 = TCP IPv6 Send, 13 = TCP IPv6 Recv
+    // 42 = UDP IPv4 Send, 43 = UDP IPv4 Recv
+    // 44 = UDP IPv6 Send, 45 = UDP IPv6 Recv
+    let is_rx = id == 11 || id == 13 || id == 43 || id == 45;
+    let is_tx = id == 10 || id == 12 || id == 44 || id == 46 || id == 42;
 
     if (is_rx || is_tx) && bytes > 0 {
         ETW_BYTE_COUNT.fetch_add(bytes, Ordering::Relaxed);
