@@ -351,17 +351,33 @@
 
           <div class="setting-item">
             <div class="setting-info">
-              <label for="graphLineStyle">Graph Line Style</label>
-              <span>Choose between classic dashed lines or smooth solid lines</span>
+              <label for="downGraphStyle">Download Graph Style</label>
+              <span>Choose line style for download speed visualization</span>
             </div>
             <select 
-              id="graphLineStyle" 
+              id="downGraphStyle" 
               class="select-input"
-              value={$settings.graphLineStyle || 'dashed'} 
-              onchange={(e) => updateSetting("graphLineStyle", e.target.value)}
+              value={$settings.downGraphStyle || 'dashed'} 
+              onchange={(e) => updateSetting("downGraphStyle", e.target.value)}
             >
-              <option value="dashed">Dashed Lines (Classic)</option>
-              <option value="solid">Smooth Solid Lines (Modern)</option>
+              <option value="dashed">Dashed Line (Classic)</option>
+              <option value="solid">Smooth Solid Line (Modern)</option>
+            </select>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-info">
+              <label for="upGraphStyle">Upload Graph Style</label>
+              <span>Choose line style for upload speed visualization</span>
+            </div>
+            <select 
+              id="upGraphStyle" 
+              class="select-input"
+              value={$settings.upGraphStyle || 'dashed'} 
+              onchange={(e) => updateSetting("upGraphStyle", e.target.value)}
+            >
+              <option value="dashed">Dashed Line (Classic)</option>
+              <option value="solid">Smooth Solid Line (Modern)</option>
             </select>
           </div>
 

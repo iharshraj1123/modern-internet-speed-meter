@@ -5,7 +5,8 @@ import { invoke } from '@tauri-apps/api/core';
 const DEFAULT_SETTINGS = {
     unit: 'B',           // 'iB', 'B', 'b'
     graphType: 'combined', // 'combined', 'separate', 'hidden'
-    graphLineStyle: 'dashed', // 'dashed', 'solid'
+    downGraphStyle: 'dashed', // 'dashed', 'solid'
+    upGraphStyle: 'dashed',   // 'dashed', 'solid'
     opacity: 0.85,       // 0.1 to 1.0
     locked: false,       // position locked (disable drag)
     clickThrough: false, // click-through mode

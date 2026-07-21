@@ -267,7 +267,7 @@
           <svg viewBox="0 0 230 12" class="chart-svg" preserveAspectRatio="none">
             <line x1="0" y1="1" x2="230" y2="1" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.3" vector-effect="non-scaling-stroke" />
             <path d={downAreaPath} class="chart-area down-area" />
-            <path d={downPath} class="chart-line down-line" class:solid-line={$settings.graphLineStyle === 'solid'} />
+            <path d={downPath} class="chart-line down-line" class:solid-line={$settings.downGraphStyle === 'solid'} />
           </svg>
         </div>
         <div class="chart-svg-wrapper">
@@ -278,7 +278,7 @@
           <svg viewBox="0 0 230 12" class="chart-svg" preserveAspectRatio="none">
             <line x1="0" y1="1" x2="230" y2="1" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.3" vector-effect="non-scaling-stroke" />
             <path d={upAreaPath} class="chart-area up-area" />
-            <path d={upPath} class="chart-line up-line" class:solid-line={$settings.graphLineStyle === 'solid'} />
+            <path d={upPath} class="chart-line up-line" class:solid-line={$settings.upGraphStyle === 'solid'} />
           </svg>
         </div>
       </div>
@@ -298,8 +298,8 @@
           <line x1="0" y1="27" x2="230" y2="27" stroke="var(--widget-border)" opacity="0.4" vector-effect="non-scaling-stroke" />
           <path d={combinedDownAreaPath} class="chart-area down-area" />
           <path d={combinedUpAreaPath} class="chart-area up-area" />
-          <path d={combinedDownPath} class="chart-line down-line" class:solid-line={$settings.graphLineStyle === 'solid'} />
-          <path d={combinedUpPath} class="chart-line up-line" class:solid-line={$settings.graphLineStyle === 'solid'} />
+          <path d={combinedDownPath} class="chart-line down-line" class:solid-line={$settings.downGraphStyle === 'solid'} />
+          <path d={combinedUpPath} class="chart-line up-line" class:solid-line={$settings.upGraphStyle === 'solid'} />
         </svg>
       </div>
     {/if}
@@ -372,8 +372,8 @@
           <line x1="0" y1="27" x2="230" y2="27" stroke="var(--widget-border)" opacity="0.4" vector-effect="non-scaling-stroke" />
           <path d={combinedDownAreaPath} class="chart-area down-area" />
           <path d={combinedUpAreaPath} class="chart-area up-area" />
-          <path d={combinedDownPath} class="chart-line down-line" class:solid-line={$settings.graphLineStyle === 'solid'} />
-          <path d={combinedUpPath} class="chart-line up-line" class:solid-line={$settings.graphLineStyle === 'solid'} />
+          <path d={combinedDownPath} class="chart-line down-line" class:solid-line={$settings.downGraphStyle === 'solid'} />
+          <path d={combinedUpPath} class="chart-line up-line" class:solid-line={$settings.upGraphStyle === 'solid'} />
         </svg>
       </div>
     {:else if $settings.graphType === 'separate'}
@@ -386,7 +386,7 @@
           <svg viewBox="0 0 230 12" class="chart-svg" preserveAspectRatio="none">
             <line x1="0" y1="1" x2="230" y2="1" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.3" vector-effect="non-scaling-stroke" />
             <path d={downAreaPath} class="chart-area down-area" />
-            <path d={downPath} class="chart-line down-line" class:solid-line={$settings.graphLineStyle === 'solid'} />
+            <path d={downPath} class="chart-line down-line" class:solid-line={$settings.downGraphStyle === 'solid'} />
           </svg>
         </div>
         <div class="chart-svg-wrapper">
@@ -397,7 +397,7 @@
           <svg viewBox="0 0 230 12" class="chart-svg" preserveAspectRatio="none">
             <line x1="0" y1="1" x2="230" y2="1" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.3" vector-effect="non-scaling-stroke" />
             <path d={upAreaPath} class="chart-area up-area" />
-            <path d={upPath} class="chart-line up-line" class:solid-line={$settings.graphLineStyle === 'solid'} />
+            <path d={upPath} class="chart-line up-line" class:solid-line={$settings.upGraphStyle === 'solid'} />
           </svg>
         </div>
       </div>
