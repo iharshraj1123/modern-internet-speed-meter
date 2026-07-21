@@ -336,7 +336,7 @@
                 value={$settings.widgetTheme || $settings.theme || 'system'} 
                 onchange={(e) => updateSetting("widgetTheme", e.target.value)}
               >
-                <option value="system">System Default (Follow OS)</option>
+                <option value="system">System Default</option>
                 <option value="dark">Dark Theme</option>
                 <option value="light">Light Theme</option>
               </select>
@@ -353,7 +353,7 @@
                 value={$settings.dashboardTheme || $settings.theme || 'system'} 
                 onchange={(e) => updateSetting("dashboardTheme", e.target.value)}
               >
-                <option value="system">System Default (Follow OS)</option>
+                <option value="system">System Default</option>
                 <option value="dark">Dark Theme</option>
                 <option value="light">Light Theme</option>
               </select>
