@@ -351,6 +351,22 @@
 
           <div class="setting-item">
             <div class="setting-info">
+              <label for="graphLineStyle">Graph Line Style</label>
+              <span>Choose between classic dashed lines or smooth solid lines</span>
+            </div>
+            <select 
+              id="graphLineStyle" 
+              class="select-input"
+              value={$settings.graphLineStyle || 'dashed'} 
+              onchange={(e) => updateSetting("graphLineStyle", e.target.value)}
+            >
+              <option value="dashed">Dashed Lines (Classic)</option>
+              <option value="solid">Smooth Solid Lines (Modern)</option>
+            </select>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-info">
               <label for="opacity">Widget Opacity ({Math.round($settings.opacity * 100)}%)</label>
               <span>Adjust overlay transparency on the desktop</span>
             </div>
