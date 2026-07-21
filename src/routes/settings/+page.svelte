@@ -368,37 +368,6 @@
               />
             </div>
 
-            <div class="setting-item">
-              <div class="setting-info">
-                <label for="widgetLocked">Lock Widget Position</label>
-                <span>Disable overlay dragging and fix it in place</span>
-              </div>
-              <label class="switch">
-                <input 
-                  id="widgetLocked"
-                  type="checkbox" 
-                  checked={$settings.locked} 
-                  onchange={(e) => updateSetting("locked", e.target.checked)} 
-                />
-                <span class="slider"></span>
-              </label>
-            </div>
-
-            <div class="setting-item">
-              <div class="setting-info">
-                <label for="clickThrough">Click-Through Mode</label>
-                <span>Locks widget and allows clicking through it directly</span>
-              </div>
-              <label class="switch">
-                <input 
-                  id="clickThrough"
-                  type="checkbox" 
-                  checked={$settings.clickThrough} 
-                  onchange={(e) => updateSetting("clickThrough", e.target.checked)} 
-                />
-                <span class="slider"></span>
-              </label>
-            </div>
           {:else if appearanceSubTab === 'graph'}
             <div class="setting-item">
               <div class="setting-info">
@@ -462,6 +431,38 @@
                   type="checkbox" 
                   checked={$settings.showWidgetPeak ?? true} 
                   onchange={(e) => updateSetting("showWidgetPeak", e.target.checked)} 
+                />
+                <span class="slider"></span>
+              </label>
+            </div>
+
+            <div class="setting-item">
+              <div class="setting-info">
+                <label for="widgetLocked">Lock Widget Position</label>
+                <span>Disable overlay dragging and fix it in place</span>
+              </div>
+              <label class="switch">
+                <input 
+                  id="widgetLocked"
+                  type="checkbox" 
+                  checked={$settings.locked} 
+                  onchange={(e) => updateSetting("locked", e.target.checked)} 
+                />
+                <span class="slider"></span>
+              </label>
+            </div>
+
+            <div class="setting-item">
+              <div class="setting-info">
+                <label for="clickThrough">Click-Through Mode</label>
+                <span>Locks widget and allows clicking through it directly</span>
+              </div>
+              <label class="switch">
+                <input 
+                  id="clickThrough"
+                  type="checkbox" 
+                  checked={$settings.clickThrough} 
+                  onchange={(e) => updateSetting("clickThrough", e.target.checked)} 
                 />
                 <span class="slider"></span>
               </label>
