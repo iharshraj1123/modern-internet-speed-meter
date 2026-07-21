@@ -32,6 +32,12 @@ async fn measure_tcp_latency(host: &str, port: u16, samples: usize) -> u32 {
     let mut successful_samples = 0u64;
     let addr = format!("{}:{}", host, port);
 
+    // Warmup ping: Run once to awake socket/routing/DNS state and discard the result
+    let warmup_timeout = Duration::from_millis(1500);
+    let _ = tokio::time::timeout(warmup_timeout, TcpStream::connect(&addr)).await;
+    tokio::time::sleep(Duration::from_millis(30)).await;
+
+    // Actual latency measurement samples
     for _ in 0..samples {
         let start = Instant::now();
         let timeout = Duration::from_millis(2000);
@@ -63,7 +69,7 @@ async fn run_multi_dns_ping() -> (Vec<DnsPingResult>, u32) {
     let mut valid_pings = Vec::new();
 
     for (name, ip, port) in targets {
-        let latency = measure_tcp_latency(ip, port, 3).await;
+        let latency = measure_tcp_latency(ip, port, 4).await;
         results.push(DnsPingResult {
             name: name.to_string(),
             ip: ip.to_string(),
@@ -300,77 +306,80 @@ pub async fn run_speed_test(app: AppHandle) -> Result<SpeedTestProgress, String>
 }
 
 async fn run_speed_test_internal(app: AppHandle) -> Result<SpeedTestProgress, String> {
-    // 1. STAGE: Ping Test
+    // 1. STAGE: Download Speed Test
     let mut progress = SpeedTestProgress {
-        stage: "ping".to_string(),
+        stage: "download".to_string(),
         current_speed: 0,
         progress_percent: 5,
         pings: Vec::new(),
         download_speed: 0,
         upload_speed: 0,
         average_ping: 0,
-        message: "Testing DNS latency...".to_string(),
+        message: "Starting Download Speed Test...".to_string(),
     };
     let _ = app.emit("speedtest-progress", &progress);
 
-    let (dns_results, avg_ping) = run_multi_dns_ping().await;
-    progress.pings = dns_results;
-    progress.average_ping = avg_ping;
-    progress.progress_percent = 20;
-    progress.message = format!("DNS Latency: {} ms. Starting Download Speed Test...", avg_ping);
-    let _ = app.emit("speedtest-progress", &progress);
-
-    tokio::time::sleep(Duration::from_millis(300)).await;
-
-    // 2. STAGE: Download Speed Test
-    progress.stage = "download".to_string();
     let app_handle_dl = app.clone();
-    let pings_copy = progress.pings.clone();
-    let avg_ping_copy = progress.average_ping;
-
     let peak_download = execute_download_test(|inst_speed, pct| {
-        let scaled_pct = 20 + ((pct as f32 / 100.0) * 40.0) as u32; // 20% to 60%
+        let scaled_pct = 5 + ((pct as f32 / 100.0) * 40.0) as u32; // 5% to 45%
         let p = SpeedTestProgress {
             stage: "download".to_string(),
             current_speed: inst_speed,
             progress_percent: scaled_pct,
-            pings: pings_copy.clone(),
+            pings: Vec::new(),
             download_speed: inst_speed,
             upload_speed: 0,
-            average_ping: avg_ping_copy,
+            average_ping: 0,
             message: "Testing Download Speed...".to_string(),
         };
         let _ = app_handle_dl.emit("speedtest-progress", &p);
     }).await;
 
     progress.download_speed = peak_download;
-    progress.progress_percent = 60;
+    progress.progress_percent = 45;
     progress.message = "Download Test Complete. Starting Upload Speed Test...".to_string();
     let _ = app.emit("speedtest-progress", &progress);
 
     tokio::time::sleep(Duration::from_millis(300)).await;
 
-    // 3. STAGE: Upload Speed Test
+    // 2. STAGE: Upload Speed Test
     progress.stage = "upload".to_string();
     let app_handle_ul = app.clone();
-    let pings_copy_ul = progress.pings.clone();
 
     let peak_upload = execute_upload_test(|inst_speed, pct| {
-        let scaled_pct = 60 + ((pct as f32 / 100.0) * 35.0) as u32; // 60% to 95%
+        let scaled_pct = 45 + ((pct as f32 / 100.0) * 35.0) as u32; // 45% to 80%
         let p = SpeedTestProgress {
             stage: "upload".to_string(),
             current_speed: inst_speed,
             progress_percent: scaled_pct,
-            pings: pings_copy_ul.clone(),
+            pings: Vec::new(),
             download_speed: peak_download,
             upload_speed: inst_speed,
-            average_ping: avg_ping_copy,
+            average_ping: 0,
             message: "Testing Upload Speed...".to_string(),
         };
         let _ = app_handle_ul.emit("speedtest-progress", &p);
     }).await;
 
     progress.upload_speed = peak_upload;
+    progress.progress_percent = 80;
+    progress.message = "Upload Test Complete. Testing DNS Latency...".to_string();
+    let _ = app.emit("speedtest-progress", &progress);
+
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    // 3. STAGE: Ping Test (now at the end)
+    progress.stage = "ping".to_string();
+    let _ = app.emit("speedtest-progress", &progress);
+
+    let (dns_results, avg_ping) = run_multi_dns_ping().await;
+    progress.pings = dns_results;
+    progress.average_ping = avg_ping;
+    progress.progress_percent = 95;
+    progress.message = format!("DNS Latency Benchmark Complete: {} ms.", avg_ping);
+    let _ = app.emit("speedtest-progress", &progress);
+
+    tokio::time::sleep(Duration::from_millis(300)).await;
 
     // 4. STAGE: Complete
     progress.stage = "complete".to_string();
