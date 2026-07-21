@@ -8,9 +8,10 @@ use chrono::Local;
 use windows::Win32::Foundation::{CloseHandle, BOOLEAN};
 use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
-use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+use windows::Win32::System::Threading::{OpenProcess, OpenProcessToken, PROCESS_QUERY_LIMITED_INFORMATION};
 use windows::Win32::System::ProcessStatus::GetModuleFileNameExW;
 use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
+use windows::Win32::Security::{GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY};
 use windows::Win32::NetworkManagement::IpHelper::{
     FreeMibTable, GetBestInterface, GetIfTable2, MIB_IF_TABLE2,
     GetExtendedTcpTable, GetPerTcpConnectionEStats, SetPerTcpConnectionEStats,
@@ -97,6 +98,30 @@ extern "system" {
 // ---------------------------------------------------------------------------
 // Helper functions
 // ---------------------------------------------------------------------------
+
+/// Check if current process is running with elevated Administrator privileges.
+pub fn is_elevated() -> bool {
+    unsafe {
+        use windows::Win32::System::Threading::GetCurrentProcess;
+        let mut token = Default::default();
+        if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token).is_ok() {
+            let mut elevation = TOKEN_ELEVATION::default();
+            let mut size = 0u32;
+            let res = GetTokenInformation(
+                token,
+                TokenElevation,
+                Some(&mut elevation as *mut _ as *mut _),
+                std::mem::size_of::<TOKEN_ELEVATION>() as u32,
+                &mut size,
+            );
+            let _ = CloseHandle(token);
+            if res.is_ok() {
+                return elevation.TokenIsElevated != 0;
+            }
+        }
+    }
+    false
+}
 
 /// Return the executable filename of the current foreground window's process.
 fn get_active_process_name() -> String {

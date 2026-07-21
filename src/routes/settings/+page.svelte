@@ -57,11 +57,18 @@
     }
   });
 
+  let isElevated = $state(false);
+
   onMount(async () => {
     try {
       autostartEnabled = await invoke("plugin:autostart|is_enabled");
     } catch (e) {
       console.error("Autostart query failed", e);
+    }
+    try {
+      isElevated = await invoke("is_process_elevated");
+    } catch (e) {
+      console.error("Elevation check failed", e);
     }
   });
 
@@ -560,6 +567,31 @@
                 type="checkbox" 
                 checked={$settings.batterySaver} 
                 onchange={(e) => updateSetting("batterySaver", e.target.checked)} 
+              />
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-info">
+              <label for="useEtwTelemetry">Elevated ETW Kernel Tracing</label>
+              <span>Uses Windows Kernel Event Tracing (ETW) for 100% exact TCP & UDP per-process network tracking</span>
+              {#if $settings.useEtwTelemetry}
+                <div style="margin-top: 4px; font-size: 11px; font-weight: 600;">
+                  {#if isElevated}
+                    <span style="color: var(--accent-emerald);">Admin Active — ETW Operational</span>
+                  {:else}
+                    <span style="color: var(--accent-yellow);">Requires Run as Administrator on launch for ETW</span>
+                  {/if}
+                </div>
+              {/if}
+            </div>
+            <label class="switch">
+              <input 
+                id="useEtwTelemetry" 
+                type="checkbox" 
+                checked={$settings.useEtwTelemetry ?? false} 
+                onchange={(e) => updateSetting("useEtwTelemetry", e.target.checked)} 
               />
               <span class="slider"></span>
             </label>
