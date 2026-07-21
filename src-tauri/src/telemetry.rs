@@ -277,8 +277,8 @@ fn run_etw_session() {
             handle_out,
             &KERNEL_NETWORK_PROVIDER_GUID,
             EVENT_CONTROL_CODE_ENABLE_PROVIDER.0,
-            5,
-            0,
+            5, // TRACE_LEVEL_VERBOSE
+            u64::MAX, // MatchAnyKeyword: Enable all keywords for network events!
             0,
             0,
             None,
@@ -305,14 +305,34 @@ unsafe extern "system" fn etw_event_callback(event_record: *mut EVENT_RECORD) {
         return;
     }
     let record = &*event_record;
-    let pid = record.EventHeader.ProcessId;
+
+    // Check payload data buffer validity
+    if record.UserDataLength < 8 || record.UserData.is_null() {
+        return;
+    }
+
+    let user_data = record.UserData as *const u8;
+
+    // In Windows Kernel Network ETW events, incoming packet events fire in DPC interrupt context,
+    // so record.EventHeader.ProcessId is 0 or 4 (System/Idle).
+    // The actual socket-owning process ID is stored in the first 4 bytes of the UserData payload!
+    let mut pid = u32::from_ne_bytes(*(user_data as *const [u8; 4]));
+    if pid == 0 {
+        pid = record.EventHeader.ProcessId;
+    }
     if pid == 0 || pid == 4 {
         return;
     }
 
-    let id = record.EventHeader.EventDescriptor.Id;
-    let bytes = record.UserDataLength as u64;
+    // Extract packet transfer byte size from offset 4 (4 bytes) or fallback to UserDataLength
+    let packet_bytes = u32::from_ne_bytes(*(user_data.add(4) as *const [u8; 4])) as u64;
+    let bytes = if packet_bytes > 0 && packet_bytes <= 65535 {
+        packet_bytes
+    } else {
+        record.UserDataLength as u64
+    };
 
+    let id = record.EventHeader.EventDescriptor.Id;
     let is_rx = id == 11 || id == 13 || id == 43;
     let is_tx = id == 10 || id == 12 || id == 42;
 
