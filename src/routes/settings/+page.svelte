@@ -610,30 +610,30 @@
               </div>
               
               <div class="engine-cards">
-                <!-- Option 1: Process I/O (Legacy 7303ecd) -->
+                <!-- Option 1: Process I/O (Default) -->
                 <button 
                   type="button"
                   class="engine-card" 
-                  class:active={($settings.telemetryEngine || 'estats') === 'io'}
+                  class:active={($settings.telemetryEngine || 'io') === 'io'}
                   onclick={() => selectTelemetryEngine('io')}
                 >
                   <div class="engine-card-header">
                     <strong>1. Process I/O</strong>
-                    <span class="badge">Legacy</span>
+                    <span class="badge default">Standard Default</span>
                   </div>
-                  <p>Measures process I/O counters (`GetProcessIoCounters`). Low overhead, estimates network via disk & process I/O.</p>
+                  <p>Measures process I/O counters (`GetProcessIoCounters`). Low overhead, rock-solid accuracy, zero Admin requirement.</p>
                 </button>
 
-                <!-- Option 2: TCP EStats (Default) -->
+                <!-- Option 2: TCP EStats -->
                 <button 
                   type="button"
                   class="engine-card" 
-                  class:active={($settings.telemetryEngine || 'estats') === 'estats'}
+                  class:active={($settings.telemetryEngine || 'io') === 'estats'}
                   onclick={() => selectTelemetryEngine('estats')}
                 >
                   <div class="engine-card-header">
                     <strong>2. TCP EStats Engine</strong>
-                    <span class="badge default">Standard</span>
+                    <span class="badge">Experimental</span>
                   </div>
                   <p>User-mode TCP payload tracking (`GetPerTcpConnectionEStats`). Accurate for TCP streams, zero Admin requirement.</p>
                 </button>

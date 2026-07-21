@@ -26,7 +26,7 @@ const DEFAULT_SETTINGS = {
     showWidgetPeak: true,
     filterWidgetNoise: true,
     useEtwTelemetry: false,
-    telemetryEngine: 'estats' // Options: 'io', 'estats', 'etw'
+    telemetryEngine: 'io' // Options: 'io' (Default), 'estats', 'etw'
 };
 
 // Accent color palette definitions
