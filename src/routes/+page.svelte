@@ -260,15 +260,23 @@
     {#if $settings.graphType === 'separate'}
       <div class="chart-container split">
         <div class="chart-svg-wrapper">
-          <span class="chart-peak-tag">{formatSpeed(smoothMaxDown, $settings.unit)}</span>
+          <div class="widget-y-axis">
+            <span class="widget-y-label top">{formatSpeed(smoothMaxDown, $settings.unit)}</span>
+            <span class="widget-y-label bottom">0 {$settings?.unit === 'b' ? 'b/s' : 'B/s'}</span>
+          </div>
           <svg viewBox="0 0 230 12" class="chart-svg" preserveAspectRatio="none">
+            <line x1="0" y1="1" x2="230" y2="1" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.3" vector-effect="non-scaling-stroke" />
             <path d={downAreaPath} class="chart-area down-area" />
             <path d={downPath} class="chart-line down-line" />
           </svg>
         </div>
         <div class="chart-svg-wrapper">
-          <span class="chart-peak-tag">{formatSpeed(smoothMaxUp, $settings.unit)}</span>
+          <div class="widget-y-axis">
+            <span class="widget-y-label top">{formatSpeed(smoothMaxUp, $settings.unit)}</span>
+            <span class="widget-y-label bottom">0 {$settings?.unit === 'b' ? 'b/s' : 'B/s'}</span>
+          </div>
           <svg viewBox="0 0 230 12" class="chart-svg" preserveAspectRatio="none">
+            <line x1="0" y1="1" x2="230" y2="1" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.3" vector-effect="non-scaling-stroke" />
             <path d={upAreaPath} class="chart-area up-area" />
             <path d={upPath} class="chart-line up-line" />
           </svg>
@@ -279,8 +287,15 @@
     {:else}
       <!-- Combined Graph (Default) -->
       <div class="chart-container combined">
-        <span class="chart-peak-tag">{formatSpeed(smoothMaxCombined, $settings.unit)}</span>
+        <div class="widget-y-axis">
+          <span class="widget-y-label top">{formatSpeed(smoothMaxCombined, $settings.unit)}</span>
+          <span class="widget-y-label mid">{formatSpeed(smoothMaxCombined / 2, $settings.unit)}</span>
+          <span class="widget-y-label bottom">0 {$settings?.unit === 'b' ? 'b/s' : 'B/s'}</span>
+        </div>
         <svg viewBox="0 0 230 28" class="chart-svg" preserveAspectRatio="none">
+          <line x1="0" y1="1" x2="230" y2="1" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.4" vector-effect="non-scaling-stroke" />
+          <line x1="0" y1="14" x2="230" y2="14" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.25" vector-effect="non-scaling-stroke" />
+          <line x1="0" y1="27" x2="230" y2="27" stroke="var(--widget-border)" opacity="0.4" vector-effect="non-scaling-stroke" />
           <path d={combinedDownAreaPath} class="chart-area down-area" />
           <path d={combinedUpAreaPath} class="chart-area up-area" />
           <path d={combinedDownPath} class="chart-line down-line" />
@@ -346,7 +361,15 @@
     <!-- Chart rendering -->
     {#if $settings.graphType === 'combined'}
       <div class="chart-container combined">
+        <div class="widget-y-axis">
+          <span class="widget-y-label top">{formatSpeed(smoothMaxCombined, $settings.unit)}</span>
+          <span class="widget-y-label mid">{formatSpeed(smoothMaxCombined / 2, $settings.unit)}</span>
+          <span class="widget-y-label bottom">0 {$settings?.unit === 'b' ? 'b/s' : 'B/s'}</span>
+        </div>
         <svg viewBox="0 0 230 28" class="chart-svg" preserveAspectRatio="none">
+          <line x1="0" y1="1" x2="230" y2="1" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.4" vector-effect="non-scaling-stroke" />
+          <line x1="0" y1="14" x2="230" y2="14" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.25" vector-effect="non-scaling-stroke" />
+          <line x1="0" y1="27" x2="230" y2="27" stroke="var(--widget-border)" opacity="0.4" vector-effect="non-scaling-stroke" />
           <path d={combinedDownAreaPath} class="chart-area down-area" />
           <path d={combinedUpAreaPath} class="chart-area up-area" />
           <path d={combinedDownPath} class="chart-line down-line" />
@@ -355,12 +378,28 @@
       </div>
     {:else if $settings.graphType === 'separate'}
       <div class="chart-container split">
-        <svg viewBox="0 0 230 12" class="chart-svg" preserveAspectRatio="none">
-          <path d={downAreaPath} class="chart-area down-area" />
-        </svg>
-        <svg viewBox="0 0 230 12" class="chart-svg" preserveAspectRatio="none">
-          <path d={upAreaPath} class="chart-area up-area" />
-        </svg>
+        <div class="chart-svg-wrapper">
+          <div class="widget-y-axis">
+            <span class="widget-y-label top">{formatSpeed(smoothMaxDown, $settings.unit)}</span>
+            <span class="widget-y-label bottom">0 {$settings?.unit === 'b' ? 'b/s' : 'B/s'}</span>
+          </div>
+          <svg viewBox="0 0 230 12" class="chart-svg" preserveAspectRatio="none">
+            <line x1="0" y1="1" x2="230" y2="1" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.3" vector-effect="non-scaling-stroke" />
+            <path d={downAreaPath} class="chart-area down-area" />
+            <path d={downPath} class="chart-line down-line" />
+          </svg>
+        </div>
+        <div class="chart-svg-wrapper">
+          <div class="widget-y-axis">
+            <span class="widget-y-label top">{formatSpeed(smoothMaxUp, $settings.unit)}</span>
+            <span class="widget-y-label bottom">0 {$settings?.unit === 'b' ? 'b/s' : 'B/s'}</span>
+          </div>
+          <svg viewBox="0 0 230 12" class="chart-svg" preserveAspectRatio="none">
+            <line x1="0" y1="1" x2="230" y2="1" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.3" vector-effect="non-scaling-stroke" />
+            <path d={upAreaPath} class="chart-area up-area" />
+            <path d={upPath} class="chart-line up-line" />
+          </svg>
+        </div>
       </div>
     {/if}
 
@@ -559,6 +598,36 @@
     width: 100%;
     height: 100%;
     flex: 1;
+  }
+
+  .widget-y-axis {
+    position: absolute;
+    top: 0;
+    left: 2px;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    pointer-events: none;
+    z-index: 5;
+    font-size: 7px;
+    font-weight: 600;
+    color: var(--text-sec);
+    opacity: 0.65;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .widget-y-label {
+    line-height: 1;
+    letter-spacing: -0.2px;
+  }
+
+  .widget-y-label.top {
+    transform: translateY(1px);
+  }
+
+  .widget-y-label.bottom {
+    transform: translateY(-1px);
   }
 
   .chart-peak-tag {
