@@ -417,8 +417,8 @@
         <span class="chart-title">Real-time Net Throughput (60s window)</span>
         <div class="chart-stats-badges">
           <span class="chart-stat-pill down" title="Average Download Speed">Avg ↓: {formatSpeed(avgLiveDown, $settings.unit)}</span>
-          <span class="chart-stat-pill down-peak" title="Peak Download Speed">Peak ↓: {formatSpeed(peakLiveDown, $settings.unit)}</span>
           <span class="chart-stat-pill up" title="Average Upload Speed">Avg ↑: {formatSpeed(avgLiveUp, $settings.unit)}</span>
+          <span class="chart-stat-pill down-peak" title="Peak Download Speed">Peak ↓: {formatSpeed(peakLiveDown, $settings.unit)}</span>
           <span class="chart-stat-pill up-peak" title="Peak Upload Speed">Peak ↑: {formatSpeed(peakLiveUp, $settings.unit)}</span>
         </div>
       </div>
@@ -429,10 +429,15 @@
           <span class="y-label bottom">0 {$settings?.unit === 'b' ? 'b/s' : 'B/s'}</span>
         </div>
         <svg viewBox="0 0 800 120" class="live-chart-svg" preserveAspectRatio="none">
-          <!-- Reference Gridlines -->
+          <!-- Horizontal Reference Gridlines -->
           <line x1="0" y1="0" x2="800" y2="0" stroke="var(--card-border)" stroke-dasharray="4 4" opacity="0.6" vector-effect="non-scaling-stroke" />
           <line x1="0" y1="60" x2="800" y2="60" stroke="var(--card-border)" stroke-dasharray="4 4" opacity="0.4" vector-effect="non-scaling-stroke" />
           <line x1="0" y1="120" x2="800" y2="120" stroke="var(--card-border)" opacity="0.6" vector-effect="non-scaling-stroke" />
+
+          <!-- Vertical Time Gridlines (45s, 30s, 15s ago) -->
+          <line x1="200" y1="0" x2="200" y2="120" stroke="var(--card-border)" stroke-dasharray="3 3" opacity="0.2" vector-effect="non-scaling-stroke" />
+          <line x1="400" y1="0" x2="400" y2="120" stroke="var(--card-border)" stroke-dasharray="3 3" opacity="0.2" vector-effect="non-scaling-stroke" />
+          <line x1="600" y1="0" x2="600" y2="120" stroke="var(--card-border)" stroke-dasharray="3 3" opacity="0.2" vector-effect="non-scaling-stroke" />
 
           <!-- Gradients -->
           <defs>
@@ -454,6 +459,13 @@
           <path d={liveUpAreaPath} fill="url(#liveUpGrad)" />
           <path d={liveUpPath} fill="none" stroke="var(--accent-blue)" stroke-width="1.5" stroke-dasharray="3 3" vector-effect="non-scaling-stroke" />
         </svg>
+      </div>
+      <div class="x-axis-container">
+        <span class="x-label">60s ago</span>
+        <span class="x-label">45s ago</span>
+        <span class="x-label">30s ago</span>
+        <span class="x-label">15s ago</span>
+        <span class="x-label right">Now</span>
       </div>
     </section>
   {/if}
@@ -890,6 +902,26 @@
     width: 100%;
     height: 100%;
     overflow: visible;
+  }
+
+  .x-axis-container {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 4px 0 34px;
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    opacity: 0.65;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .x-label {
+    letter-spacing: -0.2px;
+  }
+
+  .x-label.right {
+    color: var(--accent-emerald);
+    font-weight: 700;
   }
 
   /* Table styling */
