@@ -193,10 +193,25 @@
     // Sync initial settings to backend
     settings.syncWithBackend($settings);
 
-    // Listen for native window resize events to save custom expanded dimensions
+    // Listen for native window resize events to save custom expanded dimensions or enforce hidden height
     try {
-      unlistenResize = await getCurrentWindow().onResized(() => {
-        saveCurrentDimensionsIfExpanded();
+      unlistenResize = await getCurrentWindow().onResized(async () => {
+        if ($settings.graphType === 'hidden') {
+          try {
+            const appWindow = getCurrentWindow();
+            const factor = await appWindow.scaleFactor().catch(() => 1);
+            const size = await appWindow.outerSize();
+            const w = Math.round(size.width / factor);
+            const h = Math.round(size.height / factor);
+            if (h !== COLLAPSED_HEIGHT) {
+              await appWindow.setSize(new LogicalSize(w, COLLAPSED_HEIGHT));
+            }
+          } catch (e) {
+            console.error("Failed to enforce collapsed height", e);
+          }
+        } else {
+          saveCurrentDimensionsIfExpanded();
+        }
       });
     } catch (e) {
       console.error("Failed to attach resize listener", e);
@@ -698,6 +713,14 @@
     justify-content: space-between;
     box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2);
     transition: background 0.3s, border 0.3s, box-shadow 0.3s;
+  }
+
+  .widget.hidden-graph {
+    height: 34px !important;
+    max-height: 34px !important;
+    min-height: 34px !important;
+    overflow: hidden !important;
+    justify-content: center !important;
   }
 
   /* Hide mid Y-axis speed label when widget height is <= 80px to prevent label clutter */
