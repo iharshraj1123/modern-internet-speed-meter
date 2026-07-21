@@ -438,6 +438,22 @@
 
             <div class="setting-item">
               <div class="setting-info">
+                <label for="showPing">Show Ping / Latency in Widget</label>
+                <span>Display real-time network latency indicator alongside speeds in widget</span>
+              </div>
+              <label class="switch">
+                <input 
+                  id="showPing" 
+                  type="checkbox" 
+                  checked={$settings.showPing ?? true} 
+                  onchange={(e) => updateSetting("showPing", e.target.checked)} 
+                />
+                <span class="slider"></span>
+              </label>
+            </div>
+
+            <div class="setting-item">
+              <div class="setting-info">
                 <label for="widgetLocked">Lock Widget Position</label>
                 <span>Disable overlay dragging and fix it in place</span>
               </div>
