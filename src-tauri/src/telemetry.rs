@@ -302,7 +302,7 @@ pub fn ensure_etw_tracer_running() {
 
 fn run_etw_session() {
     unsafe {
-        let session_name = "InternetSpeedMeterEtwSession\0";
+        let session_name = format!("InternetSpeedMeterEtwSession_{}\0", std::process::id());
         let session_name_w: Vec<u16> = session_name.encode_utf16().collect();
         
         let props_size = std::mem::size_of::<EVENT_TRACE_PROPERTIES>() + (session_name_w.len() * 2) + 256;
@@ -317,8 +317,13 @@ fn run_etw_session() {
         let mut handle_out = CONTROLTRACE_HANDLE::default();
         let _ = ControlTraceW(CONTROLTRACE_HANDLE::default(), windows::core::PCWSTR(session_name_w.as_ptr()), props, EVENT_TRACE_CONTROL_STOP);
         
-        let status = StartTraceW(&mut handle_out, windows::core::PCWSTR(session_name_w.as_ptr()), props);
-        if status.is_err() && status.0 as u32 != 183 {
+        let mut status = StartTraceW(&mut handle_out, windows::core::PCWSTR(session_name_w.as_ptr()), props);
+        if status.is_err() && status.0 as u32 == 183 {
+            let _ = ControlTraceW(CONTROLTRACE_HANDLE::default(), windows::core::PCWSTR(session_name_w.as_ptr()), props, EVENT_TRACE_CONTROL_STOP);
+            status = StartTraceW(&mut handle_out, windows::core::PCWSTR(session_name_w.as_ptr()), props);
+        }
+
+        if status.is_err() || handle_out.Value == 0 {
             ETW_ACTIVE.store(false, Ordering::Relaxed);
             return;
         }
@@ -351,6 +356,7 @@ fn run_etw_session() {
             let _ = CloseTrace(trace_handle);
         }
         
+        let _ = ControlTraceW(handle_out, windows::core::PCWSTR(session_name_w.as_ptr()), props, EVENT_TRACE_CONTROL_STOP);
         ETW_ACTIVE.store(false, Ordering::Relaxed);
     }
 }
