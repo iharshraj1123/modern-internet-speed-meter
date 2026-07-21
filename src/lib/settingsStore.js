@@ -25,7 +25,8 @@ const DEFAULT_SETTINGS = {
     showPing: true,
     showWidgetPeak: true,
     filterWidgetNoise: true,
-    useEtwTelemetry: false
+    useEtwTelemetry: false,
+    telemetryEngine: 'estats' // Options: 'io', 'estats', 'etw'
 };
 
 // Accent color palette definitions
@@ -113,7 +114,8 @@ function createSettingsStore() {
             try {
                 await invoke('set_widget_locked', { locked: settings.locked });
                 await invoke('toggle_click_through', { enabled: settings.clickThrough });
-                await invoke('set_etw_enabled', { enabled: !!settings.useEtwTelemetry });
+                const engine = settings.telemetryEngine || (settings.useEtwTelemetry ? 'etw' : 'estats');
+                await invoke('set_telemetry_engine', { engine });
             } catch (e) {
                 console.error("Backend sync failed", e);
             }

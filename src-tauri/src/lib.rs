@@ -46,10 +46,10 @@ fn restart_as_admin() -> Result<(), String> {
     telemetry::restart_as_admin()
 }
 
-// Tauri command: Enable or disable ETW kernel network tracing
+// Tauri command: Set active telemetry engine ("io", "estats", or "etw")
 #[tauri::command]
-fn set_etw_enabled(enabled: bool) {
-    telemetry::set_etw_enabled(enabled);
+fn set_telemetry_engine(engine: String) {
+    telemetry::set_telemetry_engine(&engine);
 }
 
 // Tauri command: Get historical telemetry metrics (hourly, daily, weekly, monthly, yearly)
@@ -472,7 +472,7 @@ pub fn run() {
             speedtest::run_speed_test,
             is_process_elevated,
             restart_as_admin,
-            set_etw_enabled,
+            set_telemetry_engine,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

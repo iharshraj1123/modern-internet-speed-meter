@@ -129,6 +129,18 @@
     // Custom context menu listener
     document.addEventListener("contextmenu", handleContextMenu);
 
+    // Auto-elevate to Admin if ETW toggle is ON and app is not elevated
+    if ($settings.useEtwTelemetry) {
+      try {
+        const isElevated = await invoke("is_process_elevated");
+        if (!isElevated) {
+          await invoke("restart_as_admin");
+        }
+      } catch (err) {
+        console.warn("Startup admin elevation prompt bypassed or cancelled", err);
+      }
+    }
+
     // 1. Fetch initial stats
     try {
       const initial = await invoke("get_realtime_stats");

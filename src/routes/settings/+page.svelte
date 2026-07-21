@@ -59,11 +59,18 @@
 
   let isElevated = $state(false);
   let showEtwModal = $state(false);
+  let telemetrySubTab = $state('engine'); // 'engine', 'limits'
 
-  function handleEtwToggle(e) {
-    const checked = e.target.checked;
-    updateSetting("useEtwTelemetry", checked);
-    if (checked && !isElevated) {
+  function selectTelemetryEngine(mode) {
+    updateSetting("telemetryEngine", mode);
+    updateSetting("useEtwTelemetry", mode === "etw");
+    try {
+      invoke("set_telemetry_engine", { engine: mode });
+    } catch (e) {
+      console.error("Failed to set telemetry engine", e);
+    }
+
+    if (mode === "etw" && !isElevated) {
       showEtwModal = true;
     }
   }
@@ -556,127 +563,220 @@
 
       {:else if activeTab === 'telemetry'}
         <section class="section">
-          <h2>Performance & Logic</h2>
+          <h2>Telemetry Options</h2>
 
-          <div class="setting-item">
-            <div class="setting-info">
-              <label for="idleTimeout">Idle Inactivity Timeout ({$settings.idleTimeout} mins)</label>
-              <span>Pause active screen time logging after user inactivity</span>
-            </div>
-            <input 
-              id="idleTimeout"
-              type="range" 
-              min="1" 
-              max="30" 
-              step="1"
-              value={$settings.idleTimeout} 
-              oninput={(e) => updateSetting("idleTimeout", parseInt(e.target.value))}
-              class="range-input"
-            />
+          <div class="subtabs-bar" style="display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
+            <button 
+              type="button"
+              class="subtab-btn" 
+              class:active={telemetrySubTab === 'engine'} 
+              onclick={() => telemetrySubTab = 'engine'}
+            >
+              Measurement Engine
+            </button>
+            <button 
+              type="button"
+              class="subtab-btn" 
+              class:active={telemetrySubTab === 'limits'} 
+              onclick={() => telemetrySubTab = 'limits'}
+            >
+              Performance & Limits
+            </button>
           </div>
 
-          <div class="setting-item">
-            <div class="setting-info">
-              <label for="batterySaver">Battery Saver Mode</label>
-              <span>Automatically pause logging if system battery drops below 20%</span>
-            </div>
-            <label class="switch">
-              <input 
-                id="batterySaver"
-                type="checkbox" 
-                checked={$settings.batterySaver} 
-                onchange={(e) => updateSetting("batterySaver", e.target.checked)} 
-              />
-              <span class="slider"></span>
-            </label>
-          </div>
+          {#if telemetrySubTab === 'engine'}
+            <div class="setting-item" style="flex-direction: column; align-items: stretch; gap: 12px; border-bottom: none;">
+              <div class="setting-info">
+                <label>Telemetry Measurement Engine</label>
+                <span>Select how Internet Speed Meter measures and attributes per-process network traffic</span>
+              </div>
+              
+              <div class="engine-cards">
+                <!-- Option 1: Process I/O (Legacy 7303ecd) -->
+                <button 
+                  type="button"
+                  class="engine-card" 
+                  class:active={($settings.telemetryEngine || 'estats') === 'io'}
+                  onclick={() => selectTelemetryEngine('io')}
+                >
+                  <div class="engine-card-header">
+                    <strong>1. Process I/O</strong>
+                    <span class="badge">Legacy</span>
+                  </div>
+                  <p>Measures process I/O counters (`GetProcessIoCounters`). Low overhead, estimates network via disk & process I/O.</p>
+                </button>
 
-          <div class="setting-item">
-            <div class="setting-info">
-              <label for="useEtwTelemetry">Elevated ETW Kernel Tracing</label>
-              <span>Uses Windows Kernel Event Tracing (ETW) for 100% exact TCP & UDP per-process network tracking</span>
-              {#if $settings.useEtwTelemetry}
-                <div style="margin-top: 4px; font-size: 11px; font-weight: 600;">
-                  {#if isElevated}
-                    <span style="color: var(--accent-emerald);">Admin Active — ETW Operational</span>
-                  {:else}
-                    <span style="color: var(--accent-yellow);">
-                      Requires Administrator rights. 
-                      <button 
-                        style="background: none; border: none; color: var(--accent-emerald); text-decoration: underline; cursor: pointer; padding: 0; font-weight: 700;"
-                        onclick={confirmRestartAsAdmin}
-                      >
-                        Restart as Admin now
-                      </button>
-                    </span>
+                <!-- Option 2: TCP EStats (Default) -->
+                <button 
+                  type="button"
+                  class="engine-card" 
+                  class:active={($settings.telemetryEngine || 'estats') === 'estats'}
+                  onclick={() => selectTelemetryEngine('estats')}
+                >
+                  <div class="engine-card-header">
+                    <strong>2. TCP EStats Engine</strong>
+                    <span class="badge default">Standard</span>
+                  </div>
+                  <p>User-mode TCP payload tracking (`GetPerTcpConnectionEStats`). Accurate for TCP streams, zero Admin requirement.</p>
+                </button>
+
+                <!-- Option 3: Kernel ETW Tracing -->
+                <button 
+                  type="button"
+                  class="engine-card" 
+                  class:active={($settings.telemetryEngine || 'estats') === 'etw'}
+                  onclick={() => selectTelemetryEngine('etw')}
+                >
+                  <div class="engine-card-header">
+                    <strong>3. Kernel ETW Tracing</strong>
+                    <span class="badge admin">Requires Admin</span>
+                  </div>
+                  <p>Kernel event tracing (`Microsoft-Windows-Kernel-Network`). 100% exact TCP & UDP packet accounting.</p>
+                  {#if ($settings.telemetryEngine || 'estats') === 'etw'}
+                    <div style="margin-top: 6px; font-size: 11px; font-weight: 600;">
+                      {#if isElevated}
+                        <span style="color: var(--accent-emerald);">🛡️ Admin Active — ETW Operational</span>
+                      {:else}
+                        <span style="color: var(--accent-yellow);">
+                          Requires Admin. 
+                          <span style="text-decoration: underline; cursor: pointer; color: var(--accent-emerald);" onclick={confirmRestartAsAdmin}>Restart now</span>
+                        </span>
+                      {/if}
+                    </div>
                   {/if}
+                </button>
+              </div>
+            </div>
+
+            <!-- Detailed Explanation Box -->
+            <div class="engine-explanation-box">
+              <h4>Telemetry Engine Comparison</h4>
+              
+              <div class="explanation-item">
+                <div class="explanation-title">
+                  <span class="dot legacy"></span>
+                  <strong>1. Process Disk & I/O Engine (Legacy - commit 7303ecd)</strong>
                 </div>
-              {/if}
-            </div>
-            <label class="switch">
-              <input 
-                id="useEtwTelemetry" 
-                type="checkbox" 
-                checked={$settings.useEtwTelemetry ?? false} 
-                onchange={handleEtwToggle} 
-              />
-              <span class="slider"></span>
-            </label>
-          </div>
+                <p>
+                  Queries Windows <code>GetProcessIoCounters</code> API to inspect I/O transfer bytes across running processes.
+                  <br><strong>Pros:</strong> Ultra-low CPU overhead; runs on any standard user account without UAC prompts.
+                  <br><strong>Cons:</strong> Measures total process disk & pipe I/O. File operations (like video rendering, game installs, or local file copying) get counted as network usage.
+                </p>
+              </div>
 
-          <div class="setting-item" style="margin-top: 10px; border-top: 1px solid var(--border-color); padding-top: 15px;">
-            <div class="setting-info">
-              <label for="dailyLimit">Daily Data Cap (GB)</label>
-              <span>Monitor and alert when network usage exceeds daily budget</span>
+              <div class="explanation-item">
+                <div class="explanation-title">
+                  <span class="dot standard"></span>
+                  <strong>2. TCP EStats Engine (Standard User Mode — Default)</strong>
+                </div>
+                <p>
+                  Uses Windows IP Helper APIs (<code>GetExtendedTcpTable</code> + <code>GetPerTcpConnectionEStats</code>) to track real TCP payload bytes per socket connection.
+                  <br><strong>Pros:</strong> Zero Administrator/UAC requirement; 100% accurate for all TCP connections (web browsing, file downloads, HTTP streams).
+                  <br><strong>Cons:</strong> Misses connectionless UDP/HTTP3 traffic (e.g. YouTube/Twitch QUIC video streams in Firefox/Chrome/Edge), which fall back into the "System" remainder.
+                </p>
+              </div>
+
+              <div class="explanation-item">
+                <div class="explanation-title">
+                  <span class="dot admin"></span>
+                  <strong>3. Kernel ETW Tracing Engine (Power User Admin Mode)</strong>
+                </div>
+                <p>
+                  Hooks directly into the Windows Kernel network event pipeline via Event Tracing for Windows (<code>Microsoft-Windows-Kernel-Network</code> provider).
+                  <br><strong>Pros:</strong> 100% exact TCP and UDP packet attribution directly from the OS kernel. Firefox & Chrome HTTP/3 video streams are credited 100% to the browser, reducing "System" share to ~0%.
+                  <br><strong>Cons:</strong> Requires Administrator privileges on launch (triggers Windows UAC elevation prompt).
+                </p>
+              </div>
             </div>
-            <div style="display: flex; align-items: center; gap: 8px;">
+
+          {:else if telemetrySubTab === 'limits'}
+            <div class="setting-item">
+              <div class="setting-info">
+                <label for="idleTimeout">Idle Inactivity Timeout ({$settings.idleTimeout} mins)</label>
+                <span>Pause active screen time logging after user inactivity</span>
+              </div>
               <input 
-                id="dailyLimit"
-                type="number" 
+                id="idleTimeout"
+                type="range" 
                 min="1" 
-                max="500" 
-                value={$settings.dailyLimitGB} 
-                disabled={!$settings.dailyLimitEnabled}
-                onchange={(e) => updateSetting("dailyLimitGB", parseFloat(e.target.value))}
-                class="num-input"
+                max="30" 
+                step="1"
+                value={$settings.idleTimeout} 
+                oninput={(e) => updateSetting("idleTimeout", parseInt(e.target.value))}
+                class="range-input"
               />
+            </div>
+
+            <div class="setting-item">
+              <div class="setting-info">
+                <label for="batterySaver">Battery Saver Mode</label>
+                <span>Automatically pause logging if system battery drops below 20%</span>
+              </div>
               <label class="switch">
                 <input 
+                  id="batterySaver"
                   type="checkbox" 
-                  checked={$settings.dailyLimitEnabled} 
-                  onchange={(e) => updateSetting("dailyLimitEnabled", e.target.checked)} 
+                  checked={$settings.batterySaver} 
+                  onchange={(e) => updateSetting("batterySaver", e.target.checked)} 
                 />
                 <span class="slider"></span>
               </label>
             </div>
-          </div>
 
-          <div class="setting-item">
-            <div class="setting-info">
-              <label for="monthlyLimit">Monthly Data Cap (GB)</label>
-              <span>Monitor and alert when network usage exceeds monthly budget</span>
-            </div>
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <input 
-                id="monthlyLimit"
-                type="number" 
-                min="1" 
-                max="5000" 
-                value={$settings.monthlyLimitGB} 
-                disabled={!$settings.monthlyLimitEnabled}
-                onchange={(e) => updateSetting("monthlyLimitGB", parseFloat(e.target.value))}
-                class="num-input"
-              />
-              <label class="switch">
+            <div class="setting-item" style="margin-top: 10px; border-top: 1px solid var(--border-color); padding-top: 15px;">
+              <div class="setting-info">
+                <label for="dailyLimit">Daily Data Cap (GB)</label>
+                <span>Monitor and alert when network usage exceeds daily budget</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
                 <input 
-                  type="checkbox" 
-                  checked={$settings.monthlyLimitEnabled} 
-                  onchange={(e) => updateSetting("monthlyLimitEnabled", e.target.checked)} 
+                  id="dailyLimit"
+                  type="number" 
+                  min="1" 
+                  max="500" 
+                  value={$settings.dailyLimitGB} 
+                  disabled={!$settings.dailyLimitEnabled}
+                  onchange={(e) => updateSetting("dailyLimitGB", parseFloat(e.target.value))}
+                  class="num-input"
                 />
-                <span class="slider"></span>
-              </label>
+                <label class="switch">
+                  <input 
+                    type="checkbox" 
+                    checked={$settings.dailyLimitEnabled} 
+                    onchange={(e) => updateSetting("dailyLimitEnabled", e.target.checked)} 
+                  />
+                  <span class="slider"></span>
+                </label>
+              </div>
             </div>
-          </div>
+
+            <div class="setting-item">
+              <div class="setting-info">
+                <label for="monthlyLimit">Monthly Data Cap (GB)</label>
+                <span>Monitor and alert when network usage exceeds monthly budget</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <input 
+                  id="monthlyLimit"
+                  type="number" 
+                  min="1" 
+                  max="5000" 
+                  value={$settings.monthlyLimitGB} 
+                  disabled={!$settings.monthlyLimitEnabled}
+                  onchange={(e) => updateSetting("monthlyLimitGB", parseFloat(e.target.value))}
+                  class="num-input"
+                />
+                <label class="switch">
+                  <input 
+                    type="checkbox" 
+                    checked={$settings.monthlyLimitEnabled} 
+                    onchange={(e) => updateSetting("monthlyLimitEnabled", e.target.checked)} 
+                  />
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+          {/if}
         </section>
 
       {:else if activeTab === 'data'}
@@ -821,6 +921,169 @@
 {/if}
 
 <style>
+  .subtabs-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 10px;
+  }
+
+  .subtab-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .subtab-btn:hover {
+    color: var(--text-primary);
+    background: var(--btn-bg);
+  }
+
+  .subtab-btn.active {
+    color: var(--accent-emerald);
+    background: rgba(16, 185, 129, 0.12);
+  }
+
+  .engine-explanation-box {
+    margin-top: 16px;
+    padding: 16px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+  }
+
+  .engine-explanation-box h4 {
+    margin: 0 0 14px 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  .explanation-item {
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .explanation-item:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+
+  .explanation-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+
+  .explanation-title strong {
+    font-size: 12px;
+    color: var(--text-primary);
+  }
+
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  .dot.legacy { background: #94a3b8; }
+  .dot.standard { background: #38bdf8; }
+  .dot.admin { background: #f59e0b; }
+
+  .explanation-item p {
+    font-size: 11px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin: 0;
+    padding-left: 16px;
+  }
+
+  .explanation-item code {
+    background: rgba(148, 163, 184, 0.15);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 10.5px;
+  }
+
+  .engine-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px;
+    margin-top: 4px;
+  }
+
+  .engine-card {
+    background: var(--widget-hover-bg, var(--card-bg));
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px 14px;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: var(--text-primary);
+  }
+
+  .engine-card:hover {
+    border-color: var(--accent-emerald);
+    transform: translateY(-1px);
+  }
+
+  .engine-card.active {
+    border-color: var(--accent-emerald);
+    background: rgba(16, 185, 129, 0.08);
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.15);
+  }
+
+  .engine-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+
+  .engine-card-header strong {
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .engine-card p {
+    font-size: 11px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+    margin: 0;
+  }
+
+  .badge {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(148, 163, 184, 0.2);
+    color: var(--text-secondary);
+  }
+
+  .badge.default {
+    background: rgba(56, 189, 248, 0.2);
+    color: #38bdf8;
+  }
+
+  .badge.admin {
+    background: rgba(245, 158, 11, 0.2);
+    color: #f59e0b;
+  }
+
   :global(html) {
     /* DEFAULT/LIGHT THEME VARIABLES */
     --bg-color: #f1f5f9;

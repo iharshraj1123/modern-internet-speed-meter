@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
 use chrono::Local;
 use once_cell::sync::Lazy;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Mutex;
 use windows::core::GUID;
 use windows::Win32::System::Diagnostics::Etw::{
@@ -15,6 +15,10 @@ use windows::Win32::System::Diagnostics::Etw::{
     EVENT_TRACE_LOGFILEW, EVENT_TRACE_PROPERTIES, EVENT_TRACE_REAL_TIME_MODE,
     PROCESS_TRACE_MODE_EVENT_RECORD, PROCESS_TRACE_MODE_REAL_TIME,
 };
+use windows::Win32::System::Diagnostics::ToolHelp::{
+    CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
+};
+use windows::Win32::System::Threading::{GetProcessIoCounters, IO_COUNTERS};
 
 use windows::Win32::Foundation::{CloseHandle, BOOLEAN};
 use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
@@ -174,16 +178,65 @@ pub struct EtwPidMetrics {
 
 static ETW_PID_STATS: Lazy<Mutex<HashMap<u32, EtwPidMetrics>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 static ETW_ACTIVE: AtomicBool = AtomicBool::new(false);
-static ETW_SETTING_ENABLED: AtomicBool = AtomicBool::new(false);
+static TELEMETRY_ENGINE_MODE: AtomicU8 = AtomicU8::new(1); // 0 = io, 1 = estats (default), 2 = etw
 
 const KERNEL_NETWORK_PROVIDER_GUID: GUID = GUID::from_u128(0x7dd42a49_5329_4832_8dfd_43d979153a88);
 
-pub fn set_etw_enabled(enabled: bool) {
-    ETW_SETTING_ENABLED.store(enabled, Ordering::Relaxed);
+pub fn set_telemetry_engine(engine: &str) {
+    match engine {
+        "io" => TELEMETRY_ENGINE_MODE.store(0, Ordering::Relaxed),
+        "etw" => TELEMETRY_ENGINE_MODE.store(2, Ordering::Relaxed),
+        _ => TELEMETRY_ENGINE_MODE.store(1, Ordering::Relaxed),
+    }
 }
 
-pub fn is_etw_enabled() -> bool {
-    ETW_SETTING_ENABLED.load(Ordering::Relaxed)
+pub fn get_telemetry_engine_mode() -> u8 {
+    TELEMETRY_ENGINE_MODE.load(Ordering::Relaxed)
+}
+
+#[derive(Default, Clone, Copy)]
+pub struct ProcessIoSnapshot {
+    pub read_bytes: u64,
+    pub write_bytes: u64,
+}
+
+pub fn snapshot_process_io_counters() -> HashMap<u32, ProcessIoSnapshot> {
+    let mut map = HashMap::new();
+    unsafe {
+        let handle = match CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) {
+            Ok(h) => h,
+            Err(_) => return map,
+        };
+        if handle.is_invalid() {
+            return map;
+        }
+
+        let mut entry = PROCESSENTRY32W::default();
+        entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+
+        if Process32FirstW(handle, &mut entry).is_ok() {
+            loop {
+                let pid = entry.th32ProcessID;
+                if pid > 4 {
+                    if let Ok(proc_handle) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) {
+                        let mut io = IO_COUNTERS::default();
+                        if GetProcessIoCounters(proc_handle, &mut io).is_ok() {
+                            map.insert(pid, ProcessIoSnapshot {
+                                read_bytes: io.ReadTransferCount,
+                                write_bytes: io.WriteTransferCount,
+                            });
+                        }
+                        let _ = CloseHandle(proc_handle);
+                    }
+                }
+                if Process32NextW(handle, &mut entry).is_err() {
+                    break;
+                }
+            }
+        }
+        let _ = CloseHandle(handle);
+    }
+    map
 }
 
 pub fn ensure_etw_tracer_running() {
@@ -624,6 +677,9 @@ impl TelemetryService {
             let mut last_tcp_snapshots: HashMap<TcpConnKey, TcpConnSnapshot> = HashMap::new();
             let mut estats_enabled: HashSet<TcpConnKey> = HashSet::new();
 
+            // Process I/O byte-count tracking (Legacy IO engine)
+            let mut last_io_snapshots: HashMap<u32, ProcessIoSnapshot> = HashMap::new();
+
             // PID → exe name cache (cleared every DB flush to evict reused PIDs)
             let mut process_name_cache: HashMap<u32, String> = HashMap::new();
 
@@ -666,15 +722,31 @@ impl TelemetryService {
                 }
 
             // ── 2. Per-process network attribution ──────────────────────
-            // If ETW kernel tracing is toggled ON and app is elevated as Admin,
-            // consume real-time kernel network events (TCP + UDP payload bytes).
-            // Otherwise, fallback to standard TCP EStats snapshotting.
-            let use_etw_kernel = is_etw_enabled() && is_elevated();
+            let engine_mode = get_telemetry_engine_mode();
 
-            let (pid_rx_delta, pid_tx_delta) = if use_etw_kernel {
+            let (pid_rx_delta, pid_tx_delta) = if engine_mode == 2 && is_elevated() {
+                // Engine 2: Elevated ETW Kernel Tracing (100% TCP + UDP)
                 ensure_etw_tracer_running();
                 drain_etw_deltas()
+            } else if engine_mode == 0 {
+                // Engine 0: Process I/O Counters (Legacy commit 7303ecd method)
+                let current_io = snapshot_process_io_counters();
+                let mut rx_map = HashMap::new();
+                let mut tx_map = HashMap::new();
+
+                for (pid, io) in &current_io {
+                    if let Some(prev) = last_io_snapshots.get(pid) {
+                        let rd = io.read_bytes.saturating_sub(prev.read_bytes).min(MAX_REALISTIC_BPS);
+                        let td = io.write_bytes.saturating_sub(prev.write_bytes).min(MAX_REALISTIC_BPS);
+
+                        if rd > 0 { rx_map.insert(*pid, rd); }
+                        if td > 0 { tx_map.insert(*pid, td); }
+                    }
+                }
+                last_io_snapshots = current_io;
+                (rx_map, tx_map)
             } else {
+                // Engine 1: TCP EStats Snapshotting (User-mode, default)
                 let current_tcp_snapshots = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     snapshot_tcp_connections(&mut estats_enabled)
                 })).unwrap_or_else(|_| {
