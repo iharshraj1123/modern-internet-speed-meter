@@ -413,6 +413,32 @@ fn get_process_name_for_pid(pid: u32) -> String {
                 }
             }
         }
+
+        // Fallback: Use Toolhelp32Snapshot for sandboxed / low-integrity child processes
+        // (e.g. Firefox content/socket processes) where OpenProcess returns Access Denied.
+        if let Ok(handle) = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) {
+            if !handle.is_invalid() {
+                let mut entry = PROCESSENTRY32W::default();
+                entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+                if Process32FirstW(handle, &mut entry).is_ok() {
+                    loop {
+                        if entry.th32ProcessID == pid {
+                            let len = entry.szExeFile.iter().position(|&c| c == 0).unwrap_or(entry.szExeFile.len());
+                            let name = String::from_utf16_lossy(&entry.szExeFile[..len]);
+                            let _ = CloseHandle(handle);
+                            if !name.is_empty() {
+                                return name;
+                            }
+                            break;
+                        }
+                        if Process32NextW(handle, &mut entry).is_err() {
+                            break;
+                        }
+                    }
+                }
+                let _ = CloseHandle(handle);
+            }
+        }
     }
     "System".to_string()
 }
