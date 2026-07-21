@@ -210,9 +210,9 @@
     smoothMaxCombined = rawComb >= smoothMaxCombined ? rawComb : Math.max(rawComb, smoothMaxCombined * 0.95);
   });
 
-  let scaleMaxDown = $derived(smoothMaxDown * 1.25);
-  let scaleMaxUp = $derived(smoothMaxUp * 1.25);
-  let scaleMaxCombined = $derived(smoothMaxCombined * 1.25);
+  let scaleMaxDown = $derived(smoothMaxDown * 1.20);
+  let scaleMaxUp = $derived(smoothMaxUp * 1.20);
+  let scaleMaxCombined = $derived(smoothMaxCombined * 1.20);
 
   // Graph paths
   let downPath = $derived(getPathData(downloadHistory, 24, scaleMaxDown));

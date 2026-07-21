@@ -79,7 +79,7 @@
     }
   });
 
-  let scaleLiveMax = $derived(smoothLiveMax * 1.25);
+  let scaleLiveMax = $derived(smoothLiveMax * 1.20);
 
   let liveDownPath = $derived(getSvgPath(liveHistory.download, 120, scaleLiveMax));
   let liveDownAreaPath = $derived(getSvgAreaPath(liveHistory.download, 120, scaleLiveMax));
