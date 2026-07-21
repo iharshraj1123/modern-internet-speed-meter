@@ -3,6 +3,9 @@ node_modules/
 .svelte-kit/
 /build/
 /dist/
+static/downloads/
+static/*.msi
+static/*.exe
 .env
 .env.*
 !.env.example

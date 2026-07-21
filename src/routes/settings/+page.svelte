@@ -390,8 +390,8 @@
 
             <div class="setting-item">
               <div class="setting-info">
-                <label for="downGraphStyle">Download Graph Style</label>
-                <span>Choose line style for download speed visualization</span>
+                <label for="downGraphStyle">Widget Download Graph Style</label>
+                <span>Choose line style for widget download speed visualization</span>
               </div>
               <select 
                 id="downGraphStyle" 
@@ -406,8 +406,8 @@
 
             <div class="setting-item">
               <div class="setting-info">
-                <label for="upGraphStyle">Upload Graph Style</label>
-                <span>Choose line style for upload speed visualization</span>
+                <label for="upGraphStyle">Widget Upload Graph Style</label>
+                <span>Choose line style for widget upload speed visualization</span>
               </div>
               <select 
                 id="upGraphStyle" 

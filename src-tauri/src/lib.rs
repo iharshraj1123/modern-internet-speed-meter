@@ -1,5 +1,6 @@
 mod db;
 mod telemetry;
+mod speedtest;
 
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, WebviewWindowBuilder, WebviewUrl, Emitter};
@@ -450,6 +451,7 @@ pub fn run() {
             check_data_limits,
             register_hotkey,
             unregister_hotkey,
+            speedtest::run_speed_test,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -26,6 +26,75 @@
   let sortAscending = $state(false);
 
   let unlistenStats;
+  let unlistenSpeedTest;
+
+  // Speed Test & Speedometer state
+  let showSpeedTestModal = $state(false);
+  let speedTestRunning = $state(false);
+  let speedTestStage = $state("idle"); // 'idle', 'ping', 'download', 'upload', 'complete', 'error'
+  let speedTestMsg = $state("Click 'Run Speed Test' to benchmark your connection.");
+  let speedTestProgressPct = $state(0);
+  let currentTestSpeedBps = $state(0);
+  let peakDownloadBps = $state(0);
+  let peakUploadBps = $state(0);
+  let dnsPings = $state([
+    { name: "Cloudflare", ip: "1.1.1.1", latency_ms: 0 },
+    { name: "Google DNS", ip: "8.8.8.8", latency_ms: 0 },
+    { name: "Quad9 DNS", ip: "9.9.9.9", latency_ms: 0 },
+    { name: "OpenDNS", ip: "208.67.222.222", latency_ms: 0 }
+  ]);
+  let avgPing = $state(0);
+
+  // Derived speedometer angle and gauge ratio calculations
+  let speedMbps = $derived((currentTestSpeedBps * 8) / 1000000);
+  let maxScaleMbps = $derived(speedMbps > 500 ? 1000 : (speedMbps > 100 ? 500 : 100));
+  let speedRatio = $derived(Math.min(speedMbps / maxScaleMbps, 1.0));
+  let needleAngle = $derived(-120 + (speedRatio * 240));
+  let gaugeFillPct = $derived(speedRatio);
+
+  let displayedSpeedVal = $derived(
+    currentTestSpeedBps > 0 
+      ? formatSpeed(currentTestSpeedBps, $settings.unit)
+      : (speedTestStage === 'complete' ? formatSpeed(peakDownloadBps, $settings.unit) : '0.0 Mbps')
+  );
+
+  let qualityBadge = $derived.by(() => {
+    if (avgPing === 0) return { label: "Ready to Test", icon: "⚡", class: "neutral" };
+    if (avgPing < 25) return { label: "Gaming & 4K Ultra Ready", icon: "🎮", class: "excellent" };
+    if (avgPing < 60) return { label: "Streaming & Video Calls Ready", icon: "📺", class: "good" };
+    if (avgPing < 120) return { label: "Web Browsing Standard", icon: "🌐", class: "fair" };
+    return { label: "High Latency Connection", icon: "⚠️", class: "poor" };
+  });
+
+  async function startSpeedTest() {
+    if (speedTestRunning) return;
+    speedTestRunning = true;
+    speedTestStage = "ping";
+    speedTestMsg = "Testing DNS latency...";
+    speedTestProgressPct = 5;
+    currentTestSpeedBps = 0;
+    peakDownloadBps = 0;
+    peakUploadBps = 0;
+
+    try {
+      const res = await invoke("run_speed_test");
+      if (res) {
+        speedTestStage = "complete";
+        speedTestProgressPct = 100;
+        peakDownloadBps = res.download_speed;
+        peakUploadBps = res.upload_speed;
+        if (res.pings && res.pings.length > 0) dnsPings = res.pings;
+        avgPing = res.average_ping;
+        speedTestMsg = "Speed Test Completed Successfully!";
+      }
+    } catch (e) {
+      console.error("Speed test error:", e);
+      speedTestMsg = String(e || "Speed test failed to run");
+      speedTestStage = "error";
+    } finally {
+      speedTestRunning = false;
+    }
+  }
 
   // Track live process session usage list
   let liveProcessList = $derived(
@@ -275,10 +344,23 @@
         liveProcessMap = { ...liveProcessMap };
       }
     });
+
+    unlistenSpeedTest = await listen("speedtest-progress", (event) => {
+      const data = event.payload;
+      speedTestStage = data.stage;
+      speedTestMsg = data.message;
+      speedTestProgressPct = data.progress_percent;
+      currentTestSpeedBps = data.current_speed;
+      if (data.download_speed > 0) peakDownloadBps = data.download_speed;
+      if (data.upload_speed > 0) peakUploadBps = data.upload_speed;
+      if (data.pings && data.pings.length > 0) dnsPings = data.pings;
+      if (data.average_ping > 0) avgPing = data.average_ping;
+    });
   });
 
   onDestroy(() => {
     if (unlistenStats) unlistenStats();
+    if (unlistenSpeedTest) unlistenSpeedTest();
   });
 
   function handlePeriodChange(newPeriod) {
@@ -360,8 +442,8 @@
       <button class="action-btn settings-btn" onclick={openSettings} title="Open settings">
         ⚙️ Settings
       </button>
-      <button class="action-btn refresh-btn" onclick={loadStats} title="Refresh data">
-        🔄 Refresh
+      <button class="action-btn speedtest-btn" onclick={() => showSpeedTestModal = true} title="Run Network Speed Test & Multi-DNS Latency">
+        ⚡ Speed Test
       </button>
       <button class="action-btn close-btn" onclick={closeWindow} title="Close window">
         ✕ Close
@@ -457,7 +539,7 @@
 
           <!-- Upload Area & Line -->
           <path d={liveUpAreaPath} fill="url(#liveUpGrad)" />
-          <path d={liveUpPath} fill="none" stroke="var(--accent-blue)" stroke-width="1.5" stroke-dasharray="3 3" vector-effect="non-scaling-stroke" />
+          <path d={liveUpPath} fill="none" stroke="var(--accent-blue)" stroke-width="2" vector-effect="non-scaling-stroke" />
         </svg>
       </div>
       <div class="x-axis-container">
@@ -549,6 +631,110 @@
     {/if}
   </section>
 </main>
+
+{#if showSpeedTestModal}
+  <div class="modal-backdrop" onclick={(e) => { if (e.target === e.currentTarget && !speedTestRunning) showSpeedTestModal = false; }}>
+    <div class="speedtest-modal">
+      <header class="modal-header">
+        <div class="modal-title-group">
+          <h2>⚡ Network Speedometer & Latency</h2>
+          <span class="badge {qualityBadge.class}">{qualityBadge.icon} {qualityBadge.label}</span>
+        </div>
+        <button class="modal-close" onclick={() => showSpeedTestModal = false} disabled={speedTestRunning}>✕</button>
+      </header>
+      
+      <div class="modal-body">
+        <!-- SPEEDOMETER GAUGE -->
+        <div class="speedometer-container">
+          <div class="gauge-wrapper">
+            <svg viewBox="0 0 300 220" class="speedometer-svg" class:theme-upload={speedTestStage === 'upload'}>
+              <defs>
+                <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color={speedTestStage === 'upload' ? '#2563eb' : 'var(--accent-emerald)'} />
+                  <stop offset="50%" stop-color={speedTestStage === 'upload' ? '#60a5fa' : '#3b82f6'} />
+                  <stop offset="100%" stop-color={speedTestStage === 'upload' ? '#38bdf8' : '#ec4899'} />
+                </linearGradient>
+              </defs>
+
+              <!-- Background Arc -->
+              <path d="M 45 190 A 110 110 0 1 1 255 190" fill="none" stroke="var(--border-color)" stroke-width="16" stroke-linecap="round" />
+              
+              <!-- Active Progress Arc -->
+              <path d="M 45 190 A 110 110 0 1 1 255 190" fill="none" stroke="url(#gaugeGrad)" stroke-width="16" stroke-linecap="round"
+                    stroke-dasharray="576" stroke-dashoffset={576 - (576 * gaugeFillPct)} class="gauge-active-path" />
+
+              <!-- Needle Group -->
+              <g transform="rotate({needleAngle}, 150, 150)" class="needle-group">
+                <line x1="150" y1="150" x2="150" y2="55" stroke={speedTestStage === 'upload' ? '#3b82f6' : 'var(--accent-emerald)'} stroke-width="4" stroke-linecap="round" />
+                <circle cx="150" cy="150" r="10" fill="var(--card-bg)" stroke={speedTestStage === 'upload' ? '#3b82f6' : 'var(--accent-emerald)'} stroke-width="4" />
+              </g>
+
+              <!-- Dial Tick Labels -->
+              <text x="32" y="210" class="dial-tick">0</text>
+              <text x="25" y="130" class="dial-tick">10</text>
+              <text x="65" y="65" class="dial-tick">50</text>
+              <text x="150" y="38" class="dial-tick">100</text>
+              <text x="235" y="65" class="dial-tick">250</text>
+              <text x="275" y="130" class="dial-tick">500</text>
+              <text x="268" y="210" class="dial-tick">1G</text>
+            </svg>
+
+            <div class="speed-readout">
+              <span class="speed-val" class:upload-text-active={speedTestStage === 'upload'}>{displayedSpeedVal}</span>
+              <span class="stage-pill stage-{speedTestStage}">{speedTestStage.toUpperCase()}</span>
+            </div>
+          </div>
+
+          <!-- Progress Bar -->
+          <div class="st-progress-bar-bg">
+            <div class="st-progress-fill" style="width: {speedTestProgressPct}%"></div>
+          </div>
+        </div>
+
+        <!-- SUMMARY STATS BAR -->
+        <div class="speedtest-stats-row">
+          <div class="st-card down">
+            <span class="st-label">Peak Download</span>
+            <span class="st-value down-text">↓ {formatSpeed(peakDownloadBps, $settings.unit)}</span>
+          </div>
+          <div class="st-card up">
+            <span class="st-label">Peak Upload</span>
+            <span class="st-value up-text">↑ {formatSpeed(peakUploadBps, $settings.unit)}</span>
+          </div>
+          <div class="st-card ping">
+            <span class="st-label">Average Latency</span>
+            <span class="st-value ping-text">⚡ {avgPing} ms</span>
+          </div>
+        </div>
+
+        <!-- MULTI-DNS LATENCY GRID -->
+        <div class="dns-section">
+          <h3>🌐 Multi-DNS Server Latency Ping</h3>
+          <div class="dns-grid">
+            {#each dnsPings as ping}
+              <div class="dns-card" class:online={ping.latency_ms > 0 && ping.latency_ms < 999}>
+                <div class="dns-info">
+                  <span class="dns-name">{ping.name}</span>
+                  <span class="dns-ip">{ping.ip}</span>
+                </div>
+                <span class="dns-ping-val">
+                  {ping.latency_ms > 0 && ping.latency_ms < 999 ? `${ping.latency_ms} ms` : (ping.latency_ms === 0 ? 'Testing...' : 'Timeout')}
+                </span>
+              </div>
+            {/each}
+          </div>
+        </div>
+      </div>
+
+      <footer class="modal-footer">
+        <span class="status-msg">{speedTestMsg}</span>
+        <button class="action-btn run-test-btn" onclick={startSpeedTest} disabled={speedTestRunning}>
+          {speedTestRunning ? '⏳ Testing Connection...' : (speedTestStage === 'complete' ? '🔄 Retest Speed' : '▶ Run Speed Test')}
+        </button>
+      </footer>
+    </div>
+  </div>
+{/if}
 
 <style>
   :global(html) {
@@ -1041,5 +1227,297 @@
 
   @keyframes spin {
     to { transform: rotate(360deg); }
+  }
+
+  /* Speed Test Modal & Speedometer Styling */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    animation: fadeIn 0.2s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .speedtest-modal {
+    width: 640px;
+    max-width: 92vw;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    color: var(--text-primary);
+  }
+
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--table-header);
+  }
+
+  .modal-title-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .modal-title-group h2 {
+    font-size: 15px;
+    font-weight: 700;
+    margin: 0;
+  }
+
+  .badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 20px;
+  }
+  .badge.neutral { background: rgba(156, 163, 175, 0.15); color: var(--text-secondary); }
+  .badge.excellent { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
+  .badge.good { background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.3); }
+  .badge.fair { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
+  .badge.poor { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+  .modal-close {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: background 0.2s;
+  }
+  .modal-close:hover { background: var(--btn-hover); color: var(--text-primary); }
+
+  .modal-body {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .speedometer-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+  }
+
+  .gauge-wrapper {
+    position: relative;
+    width: 280px;
+    height: 200px;
+    display: flex;
+    justify-content: center;
+  }
+
+  .speedometer-svg {
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+
+  .gauge-active-path {
+    transition: stroke-dashoffset 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .needle-group {
+    transition: transform 0.35s cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+
+  .dial-tick {
+    font-size: 11px;
+    font-weight: 700;
+    fill: var(--text-secondary);
+    text-anchor: middle;
+    user-select: none;
+  }
+
+  .speed-readout {
+    position: absolute;
+    bottom: 25px;
+    left: 0;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .speed-val {
+    font-size: 26px;
+    font-weight: 800;
+    color: var(--text-primary);
+    letter-spacing: -0.5px;
+    font-variant-numeric: tabular-nums;
+    transition: color 0.3s ease;
+  }
+
+  .speed-val.upload-text-active {
+    color: #3b82f6;
+  }
+
+  .stage-pill {
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-top: 4px;
+    background: rgba(156, 163, 175, 0.15);
+    color: var(--text-secondary);
+  }
+  .stage-pill.stage-download { background: rgba(16, 185, 129, 0.15); color: #10b981; }
+  .stage-pill.stage-upload { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
+  .stage-pill.stage-ping { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
+  .stage-pill.stage-complete { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+
+  .st-progress-bar-bg {
+    width: 100%;
+    height: 4px;
+    background: var(--border-color);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 10px;
+  }
+
+  .st-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-emerald), #3b82f6);
+    transition: width 0.3s ease;
+  }
+
+  .speedtest-stats-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+
+  .st-card {
+    background: var(--table-header);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .st-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  .st-value {
+    font-size: 16px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .st-value.down-text { color: var(--accent-emerald); }
+  .st-value.up-text { color: var(--accent-blue); }
+  .st-value.ping-text { color: #f59e0b; }
+
+  .dns-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .dns-section h3 {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    margin: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .dns-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .dns-card {
+    background: var(--table-header);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .dns-info {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .dns-name {
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .dns-ip {
+    font-size: 10px;
+    color: var(--text-secondary);
+  }
+
+  .dns-ping-val {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .dns-card.online .dns-ping-val {
+    color: var(--accent-emerald);
+  }
+
+  .modal-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 20px;
+    border-top: 1px solid var(--border-color);
+    background: var(--table-header);
+  }
+
+  .status-msg {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 500;
+  }
+
+  .run-test-btn {
+    background: var(--accent-emerald) !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    padding: 8px 18px !important;
+    border-radius: 8px !important;
+    border: none !important;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+
+  .run-test-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
 </style>
