@@ -4,6 +4,9 @@
 [![License](https://img.shields.io/badge/License-NC--SA%20%2B%20Attribution-violet?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20x64-sky?style=flat-square)](https://github.com/iharshraj1123/modern-internet-speed-meter/releases)
 
+<img width="1510" height="832" alt="image" src="https://github.com/user-attachments/assets/1113dcbc-7623-4020-8af0-6b9b2f2d4b38" />
+
+
 A glassmorphic desktop widget and network telemetry dashboard built with Tauri v2, Rust, and SvelteKit. It monitors network transfer rates, tracks per-process bandwidth usage, logs telemetry data locally to SQLite, and provides customizable desktop overlay graphs.
 
 ---
