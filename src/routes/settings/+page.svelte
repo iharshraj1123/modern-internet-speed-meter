@@ -48,6 +48,15 @@
     }
   });
 
+  $effect(() => {
+    const theme = $settings.dashboardTheme || $settings.theme || 'system';
+    if (theme === 'system') {
+      document.documentElement.removeAttribute('data-theme');
+    } else {
+      document.documentElement.setAttribute('data-theme', theme);
+    }
+  });
+
   onMount(async () => {
     try {
       autostartEnabled = await invoke("plugin:autostart|is_enabled");
@@ -318,16 +327,33 @@
 
             <div class="setting-item">
               <div class="setting-info">
-                <label for="themeSelect">Application Theme</label>
-                <span>Choose between System, Dark, or Light interface themes</span>
+                <label for="widgetThemeSelect">Desktop Widget Theme</label>
+                <span>Independent color theme for floating overlay widget</span>
               </div>
               <select 
-                id="themeSelect" 
+                id="widgetThemeSelect" 
                 class="select-input"
-                value={$settings.theme || 'system'} 
-                onchange={(e) => updateSetting("theme", e.target.value)}
+                value={$settings.widgetTheme || $settings.theme || 'system'} 
+                onchange={(e) => updateSetting("widgetTheme", e.target.value)}
               >
-                <option value="system">System Default</option>
+                <option value="system">System Default (Follow OS)</option>
+                <option value="dark">Dark Theme</option>
+                <option value="light">Light Theme</option>
+              </select>
+            </div>
+
+            <div class="setting-item">
+              <div class="setting-info">
+                <label for="dashboardThemeSelect">Dashboard & Settings Theme</label>
+                <span>Color theme for main analytics and settings windows</span>
+              </div>
+              <select 
+                id="dashboardThemeSelect" 
+                class="select-input"
+                value={$settings.dashboardTheme || $settings.theme || 'system'} 
+                onchange={(e) => updateSetting("dashboardTheme", e.target.value)}
+              >
+                <option value="system">System Default (Follow OS)</option>
                 <option value="dark">Dark Theme</option>
                 <option value="light">Light Theme</option>
               </select>

@@ -13,7 +13,9 @@ const DEFAULT_SETTINGS = {
     samplingRate: 1000,  // ms
     idleTimeout: 5,      // minutes
     batterySaver: true,  // disable on low battery
-    theme: 'system',      // 'system', 'dark', 'light'
+    widgetTheme: 'system',    // 'system', 'dark', 'light'
+    dashboardTheme: 'system', // 'system', 'dark', 'light'
+    theme: 'system',          // legacy fallback
     accentColor: 'emerald',
     dailyLimitEnabled: false,
     dailyLimitGB: 5,

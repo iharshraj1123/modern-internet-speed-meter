@@ -66,6 +66,15 @@
     return { label: "High Latency Connection", icon: "⚠️", class: "poor" };
   });
 
+  $effect(() => {
+    const theme = $settings.dashboardTheme || $settings.theme || 'system';
+    if (theme === 'system') {
+      document.documentElement.removeAttribute('data-theme');
+    } else {
+      document.documentElement.setAttribute('data-theme', theme);
+    }
+  });
+
   async function startSpeedTest() {
     if (speedTestRunning) return;
     speedTestRunning = true;

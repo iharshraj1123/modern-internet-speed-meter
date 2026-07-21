@@ -83,6 +83,13 @@
   };
 
   $effect(() => {
+    const theme = $settings.widgetTheme || $settings.theme || 'system';
+    if (theme === 'system') {
+      document.documentElement.removeAttribute('data-theme');
+    } else {
+      document.documentElement.setAttribute('data-theme', theme);
+    }
+
     const accent = $settings.accentColor || "emerald";
     const colors = ACCENT_COLORS[accent] || ACCENT_COLORS.emerald;
     const op = $settings.opacity ?? 0.85;
@@ -93,10 +100,12 @@
     document.documentElement.style.setProperty('--widget-hover-border', `${colors.dark}55`);
     document.documentElement.style.setProperty('--chart-down-fill', `${colors.dark}22`);
 
+    const isLight = theme === 'light' || (theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: light)').matches);
+
     // Solid background when opacity is set to 1.0 (or scaled linearly)
-    if ($settings.theme === 'light') {
-      document.documentElement.style.setProperty('--widget-bg', `rgba(255, 255, 255, ${op})`);
-      document.documentElement.style.setProperty('--widget-hover-bg', `rgba(255, 255, 255, ${Math.min(1.0, op + 0.05)})`);
+    if (isLight) {
+      document.documentElement.style.setProperty('--widget-bg', `rgba(241, 245, 249, ${op})`);
+      document.documentElement.style.setProperty('--widget-hover-bg', `rgba(248, 250, 252, ${Math.min(1.0, op + 0.05)})`);
     } else {
       document.documentElement.style.setProperty('--widget-bg', `rgba(10, 10, 12, ${op})`);
       document.documentElement.style.setProperty('--widget-hover-bg', `rgba(15, 15, 18, ${Math.min(1.0, op + 0.05)})`);
