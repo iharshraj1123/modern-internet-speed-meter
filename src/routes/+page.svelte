@@ -129,8 +129,15 @@
     // Custom context menu listener
     document.addEventListener("contextmenu", handleContextMenu);
 
+    // Sync saved telemetry engine setting with Rust backend on app startup
+    try {
+      await settings.syncWithBackend($settings);
+    } catch (e) {
+      console.error("Failed to sync initial settings with backend", e);
+    }
+
     // Auto-elevate to Admin if ETW toggle is ON and app is not elevated
-    if ($settings.useEtwTelemetry) {
+    if ($settings.useEtwTelemetry || $settings.telemetryEngine === 'etw') {
       try {
         const isElevated = await invoke("is_process_elevated");
         if (!isElevated) {
