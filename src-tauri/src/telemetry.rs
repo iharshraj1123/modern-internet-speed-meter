@@ -365,6 +365,8 @@ unsafe extern "system" fn etw_event_callback(event_record: *mut EVENT_RECORD) {
     if event_record.is_null() {
         return;
     }
+    ETW_EVENT_COUNT.fetch_add(1, Ordering::Relaxed);
+
     let record = &*event_record;
 
     // Check payload data buffer validity
@@ -381,7 +383,7 @@ unsafe extern "system" fn etw_event_callback(event_record: *mut EVENT_RECORD) {
     if pid == 0 {
         pid = record.EventHeader.ProcessId;
     }
-    if pid == 0 || pid == 4 {
+    if pid == 0 {
         return;
     }
 
@@ -394,11 +396,12 @@ unsafe extern "system" fn etw_event_callback(event_record: *mut EVENT_RECORD) {
     };
 
     let id = record.EventHeader.EventDescriptor.Id;
-    let is_rx = id == 11 || id == 13 || id == 43;
-    let is_tx = id == 10 || id == 12 || id == 42;
+    // RX Event IDs: 11 (TCP v4 Recv), 13 (TCP v4 Retransmit), 15 (TCP v6 Recv), 43 (UDP v4 Recv), 45 (UDP v6 Recv)
+    let is_rx = id == 11 || id == 13 || id == 15 || id == 43 || id == 45;
+    // TX Event IDs: 10 (TCP v4 Send), 12 (TCP v4 Disconnect), 14 (TCP v6 Send), 42 (UDP v4 Send), 44 (UDP v6 Send)
+    let is_tx = id == 10 || id == 12 || id == 14 || id == 42 || id == 44;
 
     if (is_rx || is_tx) && bytes > 0 {
-        ETW_EVENT_COUNT.fetch_add(1, Ordering::Relaxed);
         ETW_BYTE_COUNT.fetch_add(bytes, Ordering::Relaxed);
         if let Ok(mut map) = ETW_PID_STATS.lock() {
             let entry = map.entry(pid).or_default();
