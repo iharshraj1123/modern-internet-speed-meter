@@ -23,7 +23,8 @@ const DEFAULT_SETTINGS = {
     monthlyLimitGB: 50,
     globalHotkey: 'Ctrl+Shift+S',
     showPing: true,
-    showWidgetPeak: true
+    showWidgetPeak: true,
+    showWidgetData: false
 };
 
 // Accent color palette definitions

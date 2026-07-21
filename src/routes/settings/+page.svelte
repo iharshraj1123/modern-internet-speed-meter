@@ -448,6 +448,22 @@
 
             <div class="setting-item">
               <div class="setting-info">
+                <label for="showWidgetData">Show Real-Time Speed & Graph in Widget</label>
+                <span>Display live throughput metrics and dynamic chart movements on the desktop widget</span>
+              </div>
+              <label class="switch">
+                <input 
+                  id="showWidgetData" 
+                  type="checkbox" 
+                  checked={$settings.showWidgetData ?? false} 
+                  onchange={(e) => updateSetting("showWidgetData", e.target.checked)} 
+                />
+                <span class="slider"></span>
+              </label>
+            </div>
+
+            <div class="setting-item">
+              <div class="setting-info">
                 <label for="showWidgetPeak">Show Peak Label in Widget</label>
                 <span>Display real-time peak speed overlay tag on desktop widget graph</span>
               </div>

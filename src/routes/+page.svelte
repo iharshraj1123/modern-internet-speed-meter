@@ -322,14 +322,22 @@
     }
   });
 
+  // Widget active speed and history derived state (flattened to 0 by default unless showWidgetData is true)
+  let activeDownSpeed = $derived($settings.showWidgetData ? downloadSpeed : 0);
+  let activeUpSpeed = $derived($settings.showWidgetData ? uploadSpeed : 0);
+
+  const ZERO_HISTORY = Array(20).fill(0);
+  let activeDownHistory = $derived($settings.showWidgetData ? downloadHistory : ZERO_HISTORY);
+  let activeUpHistory = $derived($settings.showWidgetData ? uploadHistory : ZERO_HISTORY);
+
   // Calculate dynamic smooth peak scaling for graphs to prevent scale popping
   let smoothMaxDown = $state(1024);
   let smoothMaxUp = $state(1024);
   let smoothMaxCombined = $state(1024);
 
   $effect(() => {
-    const rawDown = Math.max(...downloadHistory, 1024);
-    const rawUp = Math.max(...uploadHistory, 1024);
+    const rawDown = Math.max(...activeDownHistory, 1024);
+    const rawUp = Math.max(...activeUpHistory, 1024);
     const rawComb = Math.max(rawDown, rawUp);
 
     smoothMaxDown = rawDown >= smoothMaxDown ? rawDown : Math.max(rawDown, smoothMaxDown * 0.95);
@@ -342,20 +350,20 @@
   let scaleMaxCombined = $derived(smoothMaxCombined * 1.20);
 
   // Graph paths
-  let downPath = $derived(getPathData(downloadHistory, 12, scaleMaxDown));
-  let downAreaPath = $derived(getAreaPathData(downloadHistory, 12, scaleMaxDown));
-  let upPath = $derived(getPathData(uploadHistory, 12, scaleMaxUp));
-  let upAreaPath = $derived(getAreaPathData(uploadHistory, 12, scaleMaxUp));
+  let downPath = $derived(getPathData(activeDownHistory, 12, scaleMaxDown));
+  let downAreaPath = $derived(getAreaPathData(activeDownHistory, 12, scaleMaxDown));
+  let upPath = $derived(getPathData(activeUpHistory, 12, scaleMaxUp));
+  let upAreaPath = $derived(getAreaPathData(activeUpHistory, 12, scaleMaxUp));
 
-  let combinedDownAreaPath = $derived(getAreaPathData(downloadHistory, 28, scaleMaxCombined));
-  let combinedDownPath = $derived(getPathData(downloadHistory, 28, scaleMaxCombined));
-  let combinedUpAreaPath = $derived(getAreaPathData(uploadHistory, 28, scaleMaxCombined));
-  let combinedUpPath = $derived(getPathData(uploadHistory, 28, scaleMaxCombined));
+  let combinedDownAreaPath = $derived(getAreaPathData(activeDownHistory, 28, scaleMaxCombined));
+  let combinedDownPath = $derived(getPathData(activeDownHistory, 28, scaleMaxCombined));
+  let combinedUpAreaPath = $derived(getAreaPathData(activeUpHistory, 28, scaleMaxCombined));
+  let combinedUpPath = $derived(getPathData(activeUpHistory, 28, scaleMaxCombined));
 
-  let singleDownPath = $derived(getPathData(downloadHistory, 28, scaleMaxDown));
-  let singleDownAreaPath = $derived(getAreaPathData(downloadHistory, 28, scaleMaxDown));
-  let singleUpPath = $derived(getPathData(uploadHistory, 28, scaleMaxUp));
-  let singleUpAreaPath = $derived(getAreaPathData(uploadHistory, 28, scaleMaxUp));
+  let singleDownPath = $derived(getPathData(activeDownHistory, 28, scaleMaxDown));
+  let singleDownAreaPath = $derived(getAreaPathData(activeDownHistory, 28, scaleMaxDown));
+  let singleUpPath = $derived(getPathData(activeUpHistory, 28, scaleMaxUp));
+  let singleUpAreaPath = $derived(getAreaPathData(activeUpHistory, 28, scaleMaxUp));
 
   function handleDoubleClick() {
     invoke("open_dashboard");
@@ -380,11 +388,11 @@
     <div class="metrics">
       <div class="metric up">
         <span class="arrow">↑</span>
-        <span class="value">{formatSpeed(uploadSpeed, $settings.unit)}</span>
+        <span class="value">{formatSpeed(activeUpSpeed, $settings.unit)}</span>
       </div>
       <div class="metric down">
         <span class="arrow">↓</span>
-        <span class="value">{formatSpeed(downloadSpeed, $settings.unit)}</span>
+        <span class="value">{formatSpeed(activeDownSpeed, $settings.unit)}</span>
       </div>
       {#if $settings.showPing}
         <div class="ping-pill" title="Network Latency">
@@ -519,11 +527,11 @@
     <div class="metrics">
       <div class="metric up">
         <span class="arrow">↑</span>
-        <span class="value">{formatSpeed(uploadSpeed, $settings.unit)}</span>
+        <span class="value">{formatSpeed(activeUpSpeed, $settings.unit)}</span>
       </div>
       <div class="metric down">
         <span class="arrow">↓</span>
-        <span class="value">{formatSpeed(downloadSpeed, $settings.unit)}</span>
+        <span class="value">{formatSpeed(activeDownSpeed, $settings.unit)}</span>
       </div>
       {#if $settings.showPing}
         <div class="ping-pill" title="Network Latency">
