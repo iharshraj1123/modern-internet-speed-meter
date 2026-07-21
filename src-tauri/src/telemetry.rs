@@ -138,6 +138,41 @@ pub fn is_elevated() -> bool {
     false
 }
 
+/// Enable a security privilege (e.g. "SeSystemProfilePrivilege") on current process token.
+pub fn enable_privilege(privilege_name: &str) -> bool {
+    unsafe {
+        use windows::Win32::Foundation::{HANDLE, LUID};
+        use windows::Win32::Security::{
+            LookupPrivilegeValueW, AdjustTokenPrivileges, TOKEN_ADJUST_PRIVILEGES, TOKEN_PRIVILEGES, LUID_AND_ATTRIBUTES, SE_PRIVILEGE_ENABLED,
+        };
+        use windows::Win32::System::Threading::GetCurrentProcess;
+
+        let mut token = HANDLE::default();
+        if OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &mut token).is_err() {
+            return false;
+        }
+
+        let name_w: Vec<u16> = privilege_name.encode_utf16().chain(std::iter::once(0)).collect();
+        let mut luid = LUID::default();
+        if LookupPrivilegeValueW(None, windows::core::PCWSTR(name_w.as_ptr()), &mut luid).is_err() {
+            let _ = CloseHandle(token);
+            return false;
+        }
+
+        let mut tp = TOKEN_PRIVILEGES {
+            PrivilegeCount: 1,
+            Privileges: [LUID_AND_ATTRIBUTES {
+                Luid: luid,
+                Attributes: SE_PRIVILEGE_ENABLED,
+            }],
+        };
+
+        let res = AdjustTokenPrivileges(token, false, Some(&mut tp), 0, None, None);
+        let _ = CloseHandle(token);
+        res.is_ok()
+    }
+}
+
 /// Relaunch the application with Administrator privileges via UAC prompt ("runas").
 pub fn restart_as_admin() -> Result<(), String> {
     unsafe {
@@ -313,7 +348,10 @@ pub fn ensure_etw_tracer_running() {
 
 fn run_etw_session() {
     unsafe {
-        log_etw_status("Initializing ETW session...");
+        let p1 = enable_privilege("SeSystemProfilePrivilege");
+        let p2 = enable_privilege("SeDebugPrivilege");
+        log_etw_status(&format!("Initializing ETW session (Privileges: Profile={}, Debug={})...", p1, p2));
+
         let session_name_raw = format!("ISM_ETW_{}\0", std::process::id());
         let session_name_w: Vec<u16> = session_name_raw.encode_utf16().collect();
         
@@ -327,6 +365,7 @@ fn run_etw_session() {
         (*props).Wnode.Flags = 0x00020000; // WNODE_FLAG_TRACED_GUID
         (*props).LoggerNameOffset = header_size as u32;
         (*props).LogFileMode = EVENT_TRACE_REAL_TIME_MODE;
+        (*props).FlushTimer = 1; // Flush ETW real-time buffers every 1 second!
         
         // Copy the UTF-16 session name into the buffer immediately following EVENT_TRACE_PROPERTIES struct
         std::ptr::copy_nonoverlapping(
