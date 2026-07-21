@@ -383,6 +383,22 @@
 
           <div class="setting-item">
             <div class="setting-info">
+              <label for="showWidgetPeak">Show Peak Label in Widget</label>
+              <span>Display real-time peak speed overlay tag on desktop widget graph</span>
+            </div>
+            <label class="switch">
+              <input 
+                id="showWidgetPeak" 
+                type="checkbox" 
+                checked={$settings.showWidgetPeak ?? true} 
+                onchange={(e) => updateSetting("showWidgetPeak", e.target.checked)} 
+              />
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-info">
               <label for="opacity">Widget Opacity ({Math.round($settings.opacity * 100)}%)</label>
               <span>Adjust overlay transparency on the desktop</span>
             </div>

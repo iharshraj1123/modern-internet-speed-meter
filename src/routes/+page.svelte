@@ -239,6 +239,7 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div 
     class="widget" 
+    class:hide-peak={$settings.showWidgetPeak === false}
     style="opacity: {$settings.opacity};"
     ondblclick={handleDoubleClick}
     onmousedown={startDrag}
@@ -345,6 +346,7 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div 
     class="widget locked" 
+    class:hide-peak={$settings.showWidgetPeak === false}
     style="opacity: {$settings.opacity};"
     ondblclick={handleDoubleClick}
   >
@@ -668,6 +670,10 @@
     letter-spacing: -0.2px;
     z-index: 5;
     font-variant-numeric: tabular-nums;
+  }
+
+  .widget.hide-peak .chart-peak-tag {
+    display: none !important;
   }
 
   .chart-container.combined {
