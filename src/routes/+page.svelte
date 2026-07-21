@@ -32,6 +32,10 @@
   async function startResize(direction, event) {
     event.preventDefault();
     event.stopPropagation();
+    // Block vertical resizing when graph is hidden
+    if ($settings.graphType === 'hidden' && (direction.includes('South') || direction.includes('North'))) {
+      return;
+    }
     try {
       const appWindow = getCurrentWindow();
       await appWindow.startResizeDragging(direction);
@@ -247,7 +251,13 @@
           }
         }
         await appWindow.setSize(new LogicalSize(currentWidth, COLLAPSED_HEIGHT));
+        await appWindow.setMinSize(new LogicalSize(100, COLLAPSED_HEIGHT));
+        await appWindow.setMaxSize(new LogicalSize(10000, COLLAPSED_HEIGHT));
       } else if (oldType === 'hidden') {
+        // Remove height restrictions when returning to expanded graph mode
+        await appWindow.setMinSize(new LogicalSize(140, 48));
+        await appWindow.setMaxSize(null);
+
         // Revert back from hidden to expanded mode
         let targetWidth = DEFAULT_EXPANDED_WIDTH;
         let targetHeight = DEFAULT_EXPANDED_HEIGHT;
@@ -338,6 +348,7 @@
   <div 
     class="widget" 
     class:hide-peak={$settings.showWidgetPeak === false}
+    class:hidden-graph={$settings.graphType === 'hidden'}
     style="opacity: {$settings.opacity};"
     ondblclick={handleDoubleClick}
     onmousedown={startDrag}
@@ -986,6 +997,13 @@
     bottom: 18px;
     width: 6px;
     cursor: w-resize;
+  }
+
+  /* Disable vertical resize handles when graph is hidden */
+  .widget.hidden-graph .resize-edge.s,
+  .widget.hidden-graph .resize-corner.se,
+  .widget.hidden-graph .resize-corner.sw {
+    display: none !important;
   }
 
   /* Custom Right-Click Context Menu */
