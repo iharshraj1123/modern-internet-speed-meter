@@ -292,7 +292,12 @@ fn run_etw_session() {
         let trace_handle = OpenTraceW(&mut logfile);
         if trace_handle.Value != 0 && trace_handle.Value != u64::MAX {
             let handles = [trace_handle];
-            let _ = ProcessTrace(&handles, None, None);
+            while (get_telemetry_engine_mode() == 2) && is_elevated() {
+                let status = ProcessTrace(&handles, None, None);
+                if status.is_err() {
+                    break;
+                }
+            }
             let _ = CloseTrace(trace_handle);
         }
         

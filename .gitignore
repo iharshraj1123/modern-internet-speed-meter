@@ -45,3 +45,7 @@ w64devkit.zip
 
 # Local Netlify folder
 .netlify
+
+# Diagnostics and ETW testing folder
+testing/
+
