@@ -97,6 +97,16 @@
     return sum / active.length;
   });
 
+  let peakLiveDown = $derived.by(() => {
+    if (!liveHistory.download || liveHistory.download.length === 0) return 0;
+    return Math.max(...liveHistory.download);
+  });
+
+  let peakLiveUp = $derived.by(() => {
+    if (!liveHistory.upload || liveHistory.upload.length === 0) return 0;
+    return Math.max(...liveHistory.upload);
+  });
+
   let liveDownPath = $derived(getSvgPath(liveHistory.download, 120, scaleLiveMax));
   let liveDownAreaPath = $derived(getSvgAreaPath(liveHistory.download, 120, scaleLiveMax));
   let liveUpPath = $derived(getSvgPath(liveHistory.upload, 120, scaleLiveMax));
@@ -407,8 +417,9 @@
         <span class="chart-title">Real-time Net Throughput (60s window)</span>
         <div class="chart-stats-badges">
           <span class="chart-stat-pill down" title="Average Download Speed">Avg ↓: {formatSpeed(avgLiveDown, $settings.unit)}</span>
+          <span class="chart-stat-pill down-peak" title="Peak Download Speed">Peak ↓: {formatSpeed(peakLiveDown, $settings.unit)}</span>
           <span class="chart-stat-pill up" title="Average Upload Speed">Avg ↑: {formatSpeed(avgLiveUp, $settings.unit)}</span>
-          <span class="chart-stat-pill peak" title="Peak Speed">Peak: {formatSpeed(smoothLiveMax, $settings.unit)}</span>
+          <span class="chart-stat-pill up-peak" title="Peak Upload Speed">Peak ↑: {formatSpeed(peakLiveUp, $settings.unit)}</span>
         </div>
       </div>
       <div class="chart-body">
@@ -821,16 +832,22 @@
     border: 1px solid rgba(16, 185, 129, 0.2);
   }
 
+  .chart-stat-pill.down-peak {
+    color: var(--accent-emerald);
+    background: rgba(16, 185, 129, 0.05);
+    border: 1px dashed rgba(16, 185, 129, 0.35);
+  }
+
   .chart-stat-pill.up {
     color: var(--accent-blue);
     background: rgba(59, 130, 246, 0.1);
     border: 1px solid rgba(59, 130, 246, 0.2);
   }
 
-  .chart-stat-pill.peak {
-    color: var(--text-primary);
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid var(--card-border);
+  .chart-stat-pill.up-peak {
+    color: var(--accent-blue);
+    background: rgba(59, 130, 246, 0.05);
+    border: 1px dashed rgba(59, 130, 246, 0.35);
   }
 
   .chart-body {
