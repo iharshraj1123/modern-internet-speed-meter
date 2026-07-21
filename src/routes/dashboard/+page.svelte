@@ -81,6 +81,18 @@
 
   let scaleLiveMax = $derived(smoothLiveMax * 1.20);
 
+  let avgLiveDown = $derived.by(() => {
+    if (!liveHistory.download || liveHistory.download.length === 0) return 0;
+    const sum = liveHistory.download.reduce((acc, v) => acc + v, 0);
+    return sum / liveHistory.download.length;
+  });
+
+  let avgLiveUp = $derived.by(() => {
+    if (!liveHistory.upload || liveHistory.upload.length === 0) return 0;
+    const sum = liveHistory.upload.reduce((acc, v) => acc + v, 0);
+    return sum / liveHistory.upload.length;
+  });
+
   let liveDownPath = $derived(getSvgPath(liveHistory.download, 120, scaleLiveMax));
   let liveDownAreaPath = $derived(getSvgAreaPath(liveHistory.download, 120, scaleLiveMax));
   let liveUpPath = $derived(getSvgPath(liveHistory.upload, 120, scaleLiveMax));
@@ -389,7 +401,11 @@
     <section class="live-chart-section">
       <div class="chart-header">
         <span class="chart-title">Real-time Net Throughput (60s window)</span>
-        <span class="chart-max">Peak: {formatSpeed(smoothLiveMax, $settings.unit)}</span>
+        <div class="chart-stats-badges">
+          <span class="chart-stat-pill down" title="Average Download Speed">Avg ↓: {formatSpeed(avgLiveDown, $settings.unit)}</span>
+          <span class="chart-stat-pill up" title="Average Upload Speed">Avg ↑: {formatSpeed(avgLiveUp, $settings.unit)}</span>
+          <span class="chart-stat-pill peak" title="Peak Speed">Peak: {formatSpeed(smoothLiveMax, $settings.unit)}</span>
+        </div>
       </div>
       <div class="chart-body">
         <div class="y-axis-container">
@@ -774,9 +790,43 @@
   .chart-header {
     display: flex;
     justify-content: space-between;
+    align-items: center;
     font-size: 11px;
     font-weight: 600;
     color: var(--text-secondary);
+  }
+
+  .chart-stats-badges {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .chart-stat-pill {
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 6px;
+    line-height: 1.2;
+  }
+
+  .chart-stat-pill.down {
+    color: var(--accent-emerald);
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+  }
+
+  .chart-stat-pill.up {
+    color: var(--accent-blue);
+    background: rgba(59, 130, 246, 0.1);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+  }
+
+  .chart-stat-pill.peak {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--card-border);
   }
 
   .chart-body {
