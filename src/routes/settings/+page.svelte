@@ -5,6 +5,7 @@
   import { settings, ACCENT_COLORS } from "../../lib/settingsStore";
 
   let activeTab = $state("general");
+  let appearanceSubTab = $state("theme"); // 'theme' or 'graph'
   let autostartEnabled = $state(false);
   let clearSuccess = $state(false);
 
@@ -279,174 +280,193 @@
         <section class="section">
           <h2>Appearance & Theme</h2>
 
-          <div class="setting-item">
-            <div class="setting-info">
-              <label>Accent Color Theme</label>
-              <span>Choose your personal styling highlights across all views</span>
-            </div>
-            <div class="accent-picker">
-              {#each Object.entries(ACCENT_COLORS) as [colorKey, val]}
-                <button 
-                  class="accent-swatch {colorKey}" 
-                  class:active={$settings.accentColor === colorKey}
-                  style="background-color: {val.dark};" 
-                  onclick={() => updateSetting("accentColor", colorKey)}
-                  title={val.name}
-                ></button>
-              {/each}
-            </div>
-          </div>
-
-          <div class="setting-item">
-            <div class="setting-info">
-              <label for="themeSelect">Application Theme</label>
-              <span>Choose between System, Dark, or Light interface themes</span>
-            </div>
-            <select 
-              id="themeSelect" 
-              class="select-input"
-              value={$settings.theme || 'system'} 
-              onchange={(e) => updateSetting("theme", e.target.value)}
+          <div class="sub-tab-bar">
+            <button 
+              class="sub-tab-btn" 
+              class:active={appearanceSubTab === 'theme'}
+              onclick={() => appearanceSubTab = 'theme'}
             >
-              <option value="system">System Default</option>
-              <option value="dark">Dark Theme</option>
-              <option value="light">Light Theme</option>
-            </select>
-          </div>
-
-          <div class="setting-item">
-            <div class="setting-info">
-              <label for="unitType">Measurement Unit</label>
-              <span>Format speed metrics standard</span>
-            </div>
-            <select 
-              id="unitType" 
-              class="select-input"
-              value={$settings.unit} 
-              onchange={(e) => updateSetting("unit", e.target.value)}
+              🎨 Theme & Interface
+            </button>
+            <button 
+              class="sub-tab-btn" 
+              class:active={appearanceSubTab === 'graph'}
+              onclick={() => appearanceSubTab = 'graph'}
             >
-              <option value="B">Decimal Bytes (KB/s, MB/s)</option>
-              <option value="iB">Binary Bytes (KiB/s, MiB/s)</option>
-              <option value="b">Decimal Bits (Kbps, Mbps)</option>
-              <option value="ib">Binary Bits (Kibps, Mibps)</option>
-            </select>
+              📊 Widget & Graphs
+            </button>
           </div>
 
-          <div class="setting-item">
-            <div class="setting-info">
-              <label for="graphType">Graph Representation</label>
-              <span>Select the real-time speed chart overlay layout</span>
+          {#if appearanceSubTab === 'theme'}
+            <div class="setting-item">
+              <div class="setting-info">
+                <label>Accent Color Theme</label>
+                <span>Choose your personal styling highlights across all views</span>
+              </div>
+              <div class="accent-picker">
+                {#each Object.entries(ACCENT_COLORS) as [colorKey, val]}
+                  <button 
+                    class="accent-swatch {colorKey}" 
+                    class:active={$settings.accentColor === colorKey}
+                    style="background-color: {val.dark};" 
+                    onclick={() => updateSetting("accentColor", colorKey)}
+                    title={val.name}
+                  ></button>
+                {/each}
+              </div>
             </div>
-            <select 
-              id="graphType" 
-              class="select-input"
-              value={$settings.graphType} 
-              onchange={(e) => updateSetting("graphType", e.target.value)}
-            >
-              <option value="combined">Combined Graph (Dual Upload & Download Overlay)</option>
-              <option value="separate">Separate Graphs (Stacked Upload & Download Boxes)</option>
-              <option value="down_only">Download Only (Single Graph)</option>
-              <option value="up_only">Upload Only (Single Graph)</option>
-              <option value="hidden">Hidden (Metrics text only, saves CPU)</option>
-            </select>
-          </div>
 
-          <div class="setting-item">
-            <div class="setting-info">
-              <label for="downGraphStyle">Download Graph Style</label>
-              <span>Choose line style for download speed visualization</span>
+            <div class="setting-item">
+              <div class="setting-info">
+                <label for="themeSelect">Application Theme</label>
+                <span>Choose between System, Dark, or Light interface themes</span>
+              </div>
+              <select 
+                id="themeSelect" 
+                class="select-input"
+                value={$settings.theme || 'system'} 
+                onchange={(e) => updateSetting("theme", e.target.value)}
+              >
+                <option value="system">System Default</option>
+                <option value="dark">Dark Theme</option>
+                <option value="light">Light Theme</option>
+              </select>
             </div>
-            <select 
-              id="downGraphStyle" 
-              class="select-input"
-              value={$settings.downGraphStyle || 'dashed'} 
-              onchange={(e) => updateSetting("downGraphStyle", e.target.value)}
-            >
-              <option value="dashed">Dashed Line (Classic)</option>
-              <option value="solid">Smooth Solid Line (Modern)</option>
-            </select>
-          </div>
 
-          <div class="setting-item">
-            <div class="setting-info">
-              <label for="upGraphStyle">Upload Graph Style</label>
-              <span>Choose line style for upload speed visualization</span>
+            <div class="setting-item">
+              <div class="setting-info">
+                <label for="unitType">Measurement Unit</label>
+                <span>Format speed metrics standard</span>
+              </div>
+              <select 
+                id="unitType" 
+                class="select-input"
+                value={$settings.unit} 
+                onchange={(e) => updateSetting("unit", e.target.value)}
+              >
+                <option value="B">Decimal Bytes (KB/s, MB/s)</option>
+                <option value="iB">Binary Bytes (KiB/s, MiB/s)</option>
+                <option value="b">Decimal Bits (Kbps, Mbps)</option>
+                <option value="ib">Binary Bits (Kibps, Mibps)</option>
+              </select>
             </div>
-            <select 
-              id="upGraphStyle" 
-              class="select-input"
-              value={$settings.upGraphStyle || 'dashed'} 
-              onchange={(e) => updateSetting("upGraphStyle", e.target.value)}
-            >
-              <option value="dashed">Dashed Line (Classic)</option>
-              <option value="solid">Smooth Solid Line (Modern)</option>
-            </select>
-          </div>
 
-          <div class="setting-item">
-            <div class="setting-info">
-              <label for="showWidgetPeak">Show Peak Label in Widget</label>
-              <span>Display real-time peak speed overlay tag on desktop widget graph</span>
-            </div>
-            <label class="switch">
+            <div class="setting-item">
+              <div class="setting-info">
+                <label for="opacity">Widget Opacity ({Math.round($settings.opacity * 100)}%)</label>
+                <span>Adjust overlay transparency on the desktop</span>
+              </div>
               <input 
-                id="showWidgetPeak" 
-                type="checkbox" 
-                checked={$settings.showWidgetPeak ?? true} 
-                onchange={(e) => updateSetting("showWidgetPeak", e.target.checked)} 
+                id="opacity"
+                type="range" 
+                min="0.1" 
+                max="1.0" 
+                step="0.05"
+                value={$settings.opacity} 
+                oninput={(e) => updateSetting("opacity", parseFloat(e.target.value))}
+                class="range-input"
               />
-              <span class="slider"></span>
-            </label>
-          </div>
-
-          <div class="setting-item">
-            <div class="setting-info">
-              <label for="opacity">Widget Opacity ({Math.round($settings.opacity * 100)}%)</label>
-              <span>Adjust overlay transparency on the desktop</span>
             </div>
-            <input 
-              id="opacity"
-              type="range" 
-              min="0.1" 
-              max="1.0" 
-              step="0.05"
-              value={$settings.opacity} 
-              oninput={(e) => updateSetting("opacity", parseFloat(e.target.value))}
-              class="range-input"
-            />
-          </div>
 
-          <div class="setting-item">
-            <div class="setting-info">
-              <label for="widgetLocked">Lock Widget Position</label>
-              <span>Disable overlay dragging and fix it in place</span>
+            <div class="setting-item">
+              <div class="setting-info">
+                <label for="widgetLocked">Lock Widget Position</label>
+                <span>Disable overlay dragging and fix it in place</span>
+              </div>
+              <label class="switch">
+                <input 
+                  id="widgetLocked"
+                  type="checkbox" 
+                  checked={$settings.locked} 
+                  onchange={(e) => updateSetting("locked", e.target.checked)} 
+                />
+                <span class="slider"></span>
+              </label>
             </div>
-            <label class="switch">
-              <input 
-                id="widgetLocked"
-                type="checkbox" 
-                checked={$settings.locked} 
-                onchange={(e) => updateSetting("locked", e.target.checked)} 
-              />
-              <span class="slider"></span>
-            </label>
-          </div>
 
-          <div class="setting-item">
-            <div class="setting-info">
-              <label for="clickThrough">Click-Through Mode</label>
-              <span>Locks widget and allows clicking through it directly</span>
+            <div class="setting-item">
+              <div class="setting-info">
+                <label for="clickThrough">Click-Through Mode</label>
+                <span>Locks widget and allows clicking through it directly</span>
+              </div>
+              <label class="switch">
+                <input 
+                  id="clickThrough"
+                  type="checkbox" 
+                  checked={$settings.clickThrough} 
+                  onchange={(e) => updateSetting("clickThrough", e.target.checked)} 
+                />
+                <span class="slider"></span>
+              </label>
             </div>
-            <label class="switch">
-              <input 
-                id="clickThrough"
-                type="checkbox" 
-                checked={$settings.clickThrough} 
-                onchange={(e) => updateSetting("clickThrough", e.target.checked)} 
-              />
-              <span class="slider"></span>
-            </label>
-          </div>
+          {:else if appearanceSubTab === 'graph'}
+            <div class="setting-item">
+              <div class="setting-info">
+                <label for="graphType">Graph Representation</label>
+                <span>Select the real-time speed chart overlay layout</span>
+              </div>
+              <select 
+                id="graphType" 
+                class="select-input"
+                value={$settings.graphType} 
+                onchange={(e) => updateSetting("graphType", e.target.value)}
+              >
+                <option value="combined">Combined Graph (Dual Upload & Download Overlay)</option>
+                <option value="separate">Separate Graphs (Stacked Upload & Download Boxes)</option>
+                <option value="down_only">Download Only (Single Graph)</option>
+                <option value="up_only">Upload Only (Single Graph)</option>
+                <option value="hidden">Hidden (Metrics text only, saves CPU)</option>
+              </select>
+            </div>
+
+            <div class="setting-item">
+              <div class="setting-info">
+                <label for="downGraphStyle">Download Graph Style</label>
+                <span>Choose line style for download speed visualization</span>
+              </div>
+              <select 
+                id="downGraphStyle" 
+                class="select-input"
+                value={$settings.downGraphStyle || 'dashed'} 
+                onchange={(e) => updateSetting("downGraphStyle", e.target.value)}
+              >
+                <option value="dashed">Dashed Line (Classic)</option>
+                <option value="solid">Smooth Solid Line (Modern)</option>
+              </select>
+            </div>
+
+            <div class="setting-item">
+              <div class="setting-info">
+                <label for="upGraphStyle">Upload Graph Style</label>
+                <span>Choose line style for upload speed visualization</span>
+              </div>
+              <select 
+                id="upGraphStyle" 
+                class="select-input"
+                value={$settings.upGraphStyle || 'dashed'} 
+                onchange={(e) => updateSetting("upGraphStyle", e.target.value)}
+              >
+                <option value="dashed">Dashed Line (Classic)</option>
+                <option value="solid">Smooth Solid Line (Modern)</option>
+              </select>
+            </div>
+
+            <div class="setting-item">
+              <div class="setting-info">
+                <label for="showWidgetPeak">Show Peak Label in Widget</label>
+                <span>Display real-time peak speed overlay tag on desktop widget graph</span>
+              </div>
+              <label class="switch">
+                <input 
+                  id="showWidgetPeak" 
+                  type="checkbox" 
+                  checked={$settings.showWidgetPeak ?? true} 
+                  onchange={(e) => updateSetting("showWidgetPeak", e.target.checked)} 
+                />
+                <span class="slider"></span>
+              </label>
+            </div>
+          {/if}
         </section>
 
       {:else if activeTab === 'telemetry'}
@@ -842,7 +862,39 @@
     font-size: 13px;
     font-weight: 600;
     color: var(--text-primary);
-    margin: 0 0 12px 0;
+    margin: 0 0 16px 0;
+  }
+
+  .sub-tab-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .sub-tab-btn {
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    color: var(--text-secondary);
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .sub-tab-btn:hover {
+    background: var(--btn-bg);
+    color: var(--text-primary);
+  }
+
+  .sub-tab-btn.active {
+    background: var(--accent-emerald);
+    color: #ffffff;
+    border-color: var(--accent-emerald);
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
   }
 
   .setting-item {
