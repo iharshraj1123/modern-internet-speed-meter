@@ -49,10 +49,9 @@
   // Compute SVG path string from history
   function getPathData(history, height, maxVal) {
     if (maxVal === 0) maxVal = 1;
-    const scaleMax = maxVal * 1.15; // 15% headroom so graph peak never touches roof border
     const points = history.map((val, idx) => {
       const x = (idx / (history.length - 1)) * 230; // SVG width is ~230
-      const y = height - (val / scaleMax) * height;
+      const y = height - (val / maxVal) * height;
       return `${x},${y}`;
     });
     return `M ${points.join(" L ")}`;
@@ -61,10 +60,9 @@
   // Compute SVG closed path for fill area
   function getAreaPathData(history, height, maxVal) {
     if (maxVal === 0) maxVal = 1;
-    const scaleMax = maxVal * 1.15;
     const points = history.map((val, idx) => {
       const x = (idx / (history.length - 1)) * 230;
-      const y = height - (val / scaleMax) * height;
+      const y = height - (val / maxVal) * height;
       return `${x},${y}`;
     });
     return `M 0,${height} L ${points.join(" L ")} L 230,${height} Z`;
@@ -212,16 +210,20 @@
     smoothMaxCombined = rawComb >= smoothMaxCombined ? rawComb : Math.max(rawComb, smoothMaxCombined * 0.95);
   });
 
-  // Graph paths
-  let downPath = $derived(getPathData(downloadHistory, 24, smoothMaxDown));
-  let downAreaPath = $derived(getAreaPathData(downloadHistory, 24, smoothMaxDown));
-  let upPath = $derived(getPathData(uploadHistory, 24, smoothMaxUp));
-  let upAreaPath = $derived(getAreaPathData(uploadHistory, 24, smoothMaxUp));
+  let scaleMaxDown = $derived(smoothMaxDown * 1.25);
+  let scaleMaxUp = $derived(smoothMaxUp * 1.25);
+  let scaleMaxCombined = $derived(smoothMaxCombined * 1.25);
 
-  let combinedDownAreaPath = $derived(getAreaPathData(downloadHistory, 28, smoothMaxCombined));
-  let combinedDownPath = $derived(getPathData(downloadHistory, 28, smoothMaxCombined));
-  let combinedUpAreaPath = $derived(getAreaPathData(uploadHistory, 28, smoothMaxCombined));
-  let combinedUpPath = $derived(getPathData(uploadHistory, 28, smoothMaxCombined));
+  // Graph paths
+  let downPath = $derived(getPathData(downloadHistory, 24, scaleMaxDown));
+  let downAreaPath = $derived(getAreaPathData(downloadHistory, 24, scaleMaxDown));
+  let upPath = $derived(getPathData(uploadHistory, 24, scaleMaxUp));
+  let upAreaPath = $derived(getAreaPathData(uploadHistory, 24, scaleMaxUp));
+
+  let combinedDownAreaPath = $derived(getAreaPathData(downloadHistory, 28, scaleMaxCombined));
+  let combinedDownPath = $derived(getPathData(downloadHistory, 28, scaleMaxCombined));
+  let combinedUpAreaPath = $derived(getAreaPathData(uploadHistory, 28, scaleMaxCombined));
+  let combinedUpPath = $derived(getPathData(uploadHistory, 28, scaleMaxCombined));
 
   function handleDoubleClick() {
     invoke("open_dashboard");
@@ -263,22 +265,22 @@
       <div class="chart-container split">
         <div class="chart-svg-wrapper">
           <div class="widget-y-axis">
-            <span class="widget-y-label top">{formatSpeed(smoothMaxDown, $settings.unit)}</span>
+            <span class="widget-y-label top">{formatSpeed(scaleMaxDown, $settings.unit)}</span>
             <span class="widget-y-label bottom">0 {$settings?.unit === 'b' ? 'b/s' : 'B/s'}</span>
           </div>
           <svg viewBox="0 0 230 12" class="chart-svg" preserveAspectRatio="none">
-            <line x1="0" y1="2" x2="230" y2="2" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.35" vector-effect="non-scaling-stroke" />
+            <line x1="0" y1="0" x2="230" y2="0" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.35" vector-effect="non-scaling-stroke" />
             <path d={downAreaPath} class="chart-area down-area" />
             <path d={downPath} class="chart-line down-line" class:solid-line={$settings.downGraphStyle === 'solid'} />
           </svg>
         </div>
         <div class="chart-svg-wrapper">
           <div class="widget-y-axis">
-            <span class="widget-y-label top">{formatSpeed(smoothMaxUp, $settings.unit)}</span>
+            <span class="widget-y-label top">{formatSpeed(scaleMaxUp, $settings.unit)}</span>
             <span class="widget-y-label bottom">0 {$settings?.unit === 'b' ? 'b/s' : 'B/s'}</span>
           </div>
           <svg viewBox="0 0 230 12" class="chart-svg" preserveAspectRatio="none">
-            <line x1="0" y1="2" x2="230" y2="2" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.35" vector-effect="non-scaling-stroke" />
+            <line x1="0" y1="0" x2="230" y2="0" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.35" vector-effect="non-scaling-stroke" />
             <path d={upAreaPath} class="chart-area up-area" />
             <path d={upPath} class="chart-line up-line" class:solid-line={$settings.upGraphStyle === 'solid'} />
           </svg>
@@ -290,13 +292,13 @@
       <!-- Combined Graph (Default) -->
       <div class="chart-container combined">
         <div class="widget-y-axis">
-          <span class="widget-y-label top">{formatSpeed(smoothMaxCombined, $settings.unit)}</span>
-          <span class="widget-y-label mid">{formatSpeed(smoothMaxCombined / 2, $settings.unit)}</span>
+          <span class="widget-y-label top">{formatSpeed(scaleMaxCombined, $settings.unit)}</span>
+          <span class="widget-y-label mid">{formatSpeed(scaleMaxCombined / 2, $settings.unit)}</span>
           <span class="widget-y-label bottom">0 {$settings?.unit === 'b' ? 'b/s' : 'B/s'}</span>
         </div>
         <svg viewBox="0 0 230 28" class="chart-svg" preserveAspectRatio="none">
-          <line x1="0" y1="4" x2="230" y2="4" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.4" vector-effect="non-scaling-stroke" />
-          <line x1="0" y1="16" x2="230" y2="16" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.25" vector-effect="non-scaling-stroke" />
+          <line x1="0" y1="0" x2="230" y2="0" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.4" vector-effect="non-scaling-stroke" />
+          <line x1="0" y1="14" x2="230" y2="14" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.25" vector-effect="non-scaling-stroke" />
           <line x1="0" y1="28" x2="230" y2="28" stroke="var(--widget-border)" opacity="0.4" vector-effect="non-scaling-stroke" />
           <path d={combinedDownAreaPath} class="chart-area down-area" />
           <path d={combinedUpAreaPath} class="chart-area up-area" />
@@ -364,13 +366,13 @@
     {#if $settings.graphType === 'combined'}
       <div class="chart-container combined">
         <div class="widget-y-axis">
-          <span class="widget-y-label top">{formatSpeed(smoothMaxCombined, $settings.unit)}</span>
-          <span class="widget-y-label mid">{formatSpeed(smoothMaxCombined / 2, $settings.unit)}</span>
+          <span class="widget-y-label top">{formatSpeed(scaleMaxCombined, $settings.unit)}</span>
+          <span class="widget-y-label mid">{formatSpeed(scaleMaxCombined / 2, $settings.unit)}</span>
           <span class="widget-y-label bottom">0 {$settings?.unit === 'b' ? 'b/s' : 'B/s'}</span>
         </div>
         <svg viewBox="0 0 230 28" class="chart-svg" preserveAspectRatio="none">
-          <line x1="0" y1="4" x2="230" y2="4" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.4" vector-effect="non-scaling-stroke" />
-          <line x1="0" y1="16" x2="230" y2="16" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.25" vector-effect="non-scaling-stroke" />
+          <line x1="0" y1="0" x2="230" y2="0" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.4" vector-effect="non-scaling-stroke" />
+          <line x1="0" y1="14" x2="230" y2="14" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.25" vector-effect="non-scaling-stroke" />
           <line x1="0" y1="28" x2="230" y2="28" stroke="var(--widget-border)" opacity="0.4" vector-effect="non-scaling-stroke" />
           <path d={combinedDownAreaPath} class="chart-area down-area" />
           <path d={combinedUpAreaPath} class="chart-area up-area" />
@@ -382,22 +384,22 @@
       <div class="chart-container split">
         <div class="chart-svg-wrapper">
           <div class="widget-y-axis">
-            <span class="widget-y-label top">{formatSpeed(smoothMaxDown, $settings.unit)}</span>
+            <span class="widget-y-label top">{formatSpeed(scaleMaxDown, $settings.unit)}</span>
             <span class="widget-y-label bottom">0 {$settings?.unit === 'b' ? 'b/s' : 'B/s'}</span>
           </div>
           <svg viewBox="0 0 230 12" class="chart-svg" preserveAspectRatio="none">
-            <line x1="0" y1="2" x2="230" y2="2" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.3" vector-effect="non-scaling-stroke" />
+            <line x1="0" y1="0" x2="230" y2="0" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.35" vector-effect="non-scaling-stroke" />
             <path d={downAreaPath} class="chart-area down-area" />
             <path d={downPath} class="chart-line down-line" class:solid-line={$settings.downGraphStyle === 'solid'} />
           </svg>
         </div>
         <div class="chart-svg-wrapper">
           <div class="widget-y-axis">
-            <span class="widget-y-label top">{formatSpeed(smoothMaxUp, $settings.unit)}</span>
+            <span class="widget-y-label top">{formatSpeed(scaleMaxUp, $settings.unit)}</span>
             <span class="widget-y-label bottom">0 {$settings?.unit === 'b' ? 'b/s' : 'B/s'}</span>
           </div>
           <svg viewBox="0 0 230 12" class="chart-svg" preserveAspectRatio="none">
-            <line x1="0" y1="2" x2="230" y2="2" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.3" vector-effect="non-scaling-stroke" />
+            <line x1="0" y1="0" x2="230" y2="0" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.35" vector-effect="non-scaling-stroke" />
             <path d={upAreaPath} class="chart-area up-area" />
             <path d={upPath} class="chart-line up-line" class:solid-line={$settings.upGraphStyle === 'solid'} />
           </svg>

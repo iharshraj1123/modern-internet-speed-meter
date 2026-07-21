@@ -79,17 +79,18 @@
     }
   });
 
-  let liveDownPath = $derived(getSvgPath(liveHistory.download, 120, smoothLiveMax));
-  let liveDownAreaPath = $derived(getSvgAreaPath(liveHistory.download, 120, smoothLiveMax));
-  let liveUpPath = $derived(getSvgPath(liveHistory.upload, 120, smoothLiveMax));
-  let liveUpAreaPath = $derived(getSvgAreaPath(liveHistory.upload, 120, smoothLiveMax));
+  let scaleLiveMax = $derived(smoothLiveMax * 1.25);
+
+  let liveDownPath = $derived(getSvgPath(liveHistory.download, 120, scaleLiveMax));
+  let liveDownAreaPath = $derived(getSvgAreaPath(liveHistory.download, 120, scaleLiveMax));
+  let liveUpPath = $derived(getSvgPath(liveHistory.upload, 120, scaleLiveMax));
+  let liveUpAreaPath = $derived(getSvgAreaPath(liveHistory.upload, 120, scaleLiveMax));
 
   function getSvgPath(history, height, maxVal) {
     if (maxVal === 0) maxVal = 1;
-    const scaleMax = maxVal * 1.15; // 15% headroom so graph peak never touches top border
     const points = history.map((val, idx) => {
       const x = (idx / (history.length - 1)) * 800;
-      const y = height - (val / scaleMax) * height;
+      const y = height - (val / maxVal) * height;
       return `${x},${y}`;
     });
     return `M ${points.join(" L ")}`;
@@ -97,10 +98,9 @@
 
   function getSvgAreaPath(history, height, maxVal) {
     if (maxVal === 0) maxVal = 1;
-    const scaleMax = maxVal * 1.15;
     const points = history.map((val, idx) => {
       const x = (idx / (history.length - 1)) * 800;
-      const y = height - (val / scaleMax) * height;
+      const y = height - (val / maxVal) * height;
       return `${x},${y}`;
     });
     return `M 0,${height} L ${points.join(" L ")} L 800,${height} Z`;
@@ -393,14 +393,14 @@
       </div>
       <div class="chart-body">
         <div class="y-axis-container">
-          <span class="y-label top">{formatSpeed(smoothLiveMax, $settings.unit)}</span>
-          <span class="y-label mid">{formatSpeed(smoothLiveMax / 2, $settings.unit)}</span>
+          <span class="y-label top">{formatSpeed(scaleLiveMax, $settings.unit)}</span>
+          <span class="y-label mid">{formatSpeed(scaleLiveMax / 2, $settings.unit)}</span>
           <span class="y-label bottom">0 {$settings?.unit === 'b' ? 'b/s' : 'B/s'}</span>
         </div>
         <svg viewBox="0 0 800 120" class="live-chart-svg" preserveAspectRatio="none">
           <!-- Reference Gridlines -->
-          <line x1="0" y1="16" x2="800" y2="16" stroke="var(--card-border)" stroke-dasharray="4 4" opacity="0.6" vector-effect="non-scaling-stroke" />
-          <line x1="0" y1="68" x2="800" y2="68" stroke="var(--card-border)" stroke-dasharray="4 4" opacity="0.4" vector-effect="non-scaling-stroke" />
+          <line x1="0" y1="0" x2="800" y2="0" stroke="var(--card-border)" stroke-dasharray="4 4" opacity="0.6" vector-effect="non-scaling-stroke" />
+          <line x1="0" y1="60" x2="800" y2="60" stroke="var(--card-border)" stroke-dasharray="4 4" opacity="0.4" vector-effect="non-scaling-stroke" />
           <line x1="0" y1="120" x2="800" y2="120" stroke="var(--card-border)" opacity="0.6" vector-effect="non-scaling-stroke" />
 
           <!-- Gradients -->
