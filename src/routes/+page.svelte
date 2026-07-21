@@ -49,9 +49,10 @@
   // Compute SVG path string from history
   function getPathData(history, height, maxVal) {
     if (maxVal === 0) maxVal = 1;
+    const scaleMax = maxVal * 1.15; // 15% headroom so graph peak never touches roof border
     const points = history.map((val, idx) => {
       const x = (idx / (history.length - 1)) * 230; // SVG width is ~230
-      const y = height - (val / maxVal) * height;
+      const y = height - (val / scaleMax) * height;
       return `${x},${y}`;
     });
     return `M ${points.join(" L ")}`;
@@ -60,9 +61,10 @@
   // Compute SVG closed path for fill area
   function getAreaPathData(history, height, maxVal) {
     if (maxVal === 0) maxVal = 1;
+    const scaleMax = maxVal * 1.15;
     const points = history.map((val, idx) => {
       const x = (idx / (history.length - 1)) * 230;
-      const y = height - (val / maxVal) * height;
+      const y = height - (val / scaleMax) * height;
       return `${x},${y}`;
     });
     return `M 0,${height} L ${points.join(" L ")} L 230,${height} Z`;
@@ -265,7 +267,7 @@
             <span class="widget-y-label bottom">0 {$settings?.unit === 'b' ? 'b/s' : 'B/s'}</span>
           </div>
           <svg viewBox="0 0 230 12" class="chart-svg" preserveAspectRatio="none">
-            <line x1="0" y1="0" x2="230" y2="0" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.35" vector-effect="non-scaling-stroke" />
+            <line x1="0" y1="2" x2="230" y2="2" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.35" vector-effect="non-scaling-stroke" />
             <path d={downAreaPath} class="chart-area down-area" />
             <path d={downPath} class="chart-line down-line" class:solid-line={$settings.downGraphStyle === 'solid'} />
           </svg>
@@ -276,7 +278,7 @@
             <span class="widget-y-label bottom">0 {$settings?.unit === 'b' ? 'b/s' : 'B/s'}</span>
           </div>
           <svg viewBox="0 0 230 12" class="chart-svg" preserveAspectRatio="none">
-            <line x1="0" y1="0" x2="230" y2="0" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.35" vector-effect="non-scaling-stroke" />
+            <line x1="0" y1="2" x2="230" y2="2" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.35" vector-effect="non-scaling-stroke" />
             <path d={upAreaPath} class="chart-area up-area" />
             <path d={upPath} class="chart-line up-line" class:solid-line={$settings.upGraphStyle === 'solid'} />
           </svg>
@@ -293,8 +295,8 @@
           <span class="widget-y-label bottom">0 {$settings?.unit === 'b' ? 'b/s' : 'B/s'}</span>
         </div>
         <svg viewBox="0 0 230 28" class="chart-svg" preserveAspectRatio="none">
-          <line x1="0" y1="0" x2="230" y2="0" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.4" vector-effect="non-scaling-stroke" />
-          <line x1="0" y1="14" x2="230" y2="14" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.25" vector-effect="non-scaling-stroke" />
+          <line x1="0" y1="4" x2="230" y2="4" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.4" vector-effect="non-scaling-stroke" />
+          <line x1="0" y1="16" x2="230" y2="16" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.25" vector-effect="non-scaling-stroke" />
           <line x1="0" y1="28" x2="230" y2="28" stroke="var(--widget-border)" opacity="0.4" vector-effect="non-scaling-stroke" />
           <path d={combinedDownAreaPath} class="chart-area down-area" />
           <path d={combinedUpAreaPath} class="chart-area up-area" />
@@ -367,8 +369,8 @@
           <span class="widget-y-label bottom">0 {$settings?.unit === 'b' ? 'b/s' : 'B/s'}</span>
         </div>
         <svg viewBox="0 0 230 28" class="chart-svg" preserveAspectRatio="none">
-          <line x1="0" y1="0" x2="230" y2="0" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.4" vector-effect="non-scaling-stroke" />
-          <line x1="0" y1="14" x2="230" y2="14" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.25" vector-effect="non-scaling-stroke" />
+          <line x1="0" y1="4" x2="230" y2="4" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.4" vector-effect="non-scaling-stroke" />
+          <line x1="0" y1="16" x2="230" y2="16" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.25" vector-effect="non-scaling-stroke" />
           <line x1="0" y1="28" x2="230" y2="28" stroke="var(--widget-border)" opacity="0.4" vector-effect="non-scaling-stroke" />
           <path d={combinedDownAreaPath} class="chart-area down-area" />
           <path d={combinedUpAreaPath} class="chart-area up-area" />
@@ -384,7 +386,7 @@
             <span class="widget-y-label bottom">0 {$settings?.unit === 'b' ? 'b/s' : 'B/s'}</span>
           </div>
           <svg viewBox="0 0 230 12" class="chart-svg" preserveAspectRatio="none">
-            <line x1="0" y1="0" x2="230" y2="0" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.3" vector-effect="non-scaling-stroke" />
+            <line x1="0" y1="2" x2="230" y2="2" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.3" vector-effect="non-scaling-stroke" />
             <path d={downAreaPath} class="chart-area down-area" />
             <path d={downPath} class="chart-line down-line" class:solid-line={$settings.downGraphStyle === 'solid'} />
           </svg>
@@ -395,7 +397,7 @@
             <span class="widget-y-label bottom">0 {$settings?.unit === 'b' ? 'b/s' : 'B/s'}</span>
           </div>
           <svg viewBox="0 0 230 12" class="chart-svg" preserveAspectRatio="none">
-            <line x1="0" y1="0" x2="230" y2="0" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.3" vector-effect="non-scaling-stroke" />
+            <line x1="0" y1="2" x2="230" y2="2" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.3" vector-effect="non-scaling-stroke" />
             <path d={upAreaPath} class="chart-area up-area" />
             <path d={upPath} class="chart-line up-line" class:solid-line={$settings.upGraphStyle === 'solid'} />
           </svg>
