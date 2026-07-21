@@ -16,17 +16,35 @@
   let rawRetention = $state(7);
   let hourlyRetention = $state(90);
 
-  // Live Debug Inspector states
-  let debugInfo = $state(null);
+  // Live Debug Inspector states (10-tick rolling buffer)
+  let debugHistory = $state([]);
+  let selectedTickIndex = $state(-1); // -1 = Live Latest, 0..9 = past tick index
+  let debugPaused = $state(false);
   let debugInterval;
 
   async function fetchDebugInfo() {
+    if (debugPaused && selectedTickIndex !== -1) return;
     try {
-      debugInfo = await invoke("get_telemetry_debug_info");
+      const info = await invoke("get_telemetry_debug_info");
+      if (info) {
+        const timeStr = new Date().toLocaleTimeString();
+        const entry = { time: timeStr, info };
+        debugHistory = [...debugHistory.slice(-9), entry];
+      }
     } catch (err) {
       console.error("Failed to query debug info", err);
     }
   }
+
+  let activeDebugEntry = $derived(
+    (() => {
+      if (debugHistory.length === 0) return null;
+      if (selectedTickIndex >= 0 && selectedTickIndex < debugHistory.length) {
+        return debugHistory[selectedTickIndex];
+      }
+      return debugHistory[debugHistory.length - 1];
+    })()
+  );
 
   // Hotkey states
   let recordingHotkey = $state(false);
@@ -711,39 +729,67 @@
             <div class="engine-explanation-box" style="margin-top: 16px; border-color: var(--accent-emerald);">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                 <h4 style="margin: 0; color: var(--accent-emerald);">🔍 Live Telemetry Engine Debugger</h4>
-                <button class="action-btn-styled" style="padding: 4px 10px; font-size: 11px;" onclick={fetchDebugInfo}>Refresh Live</button>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                  <button class="action-btn-styled" style="padding: 4px 10px; font-size: 11px;" onclick={() => debugPaused = !debugPaused}>
+                    {debugPaused ? "▶️ Resume Stream" : "⏸️ Pause Stream"}
+                  </button>
+                  <button class="action-btn-styled" style="padding: 4px 10px; font-size: 11px;" onclick={() => { debugPaused = false; selectedTickIndex = -1; fetchDebugInfo(); }}>
+                    Jump to Live
+                  </button>
+                </div>
               </div>
 
-              {#if debugInfo}
+              {#if debugHistory.length > 0}
+                <!-- 10-Tick Rolling History Timeline -->
+                <div style="display: flex; gap: 6px; align-items: center; margin-bottom: 14px; overflow-x: auto; padding-bottom: 4px;">
+                  <span style="font-size: 11px; font-weight: 600; color: var(--text-secondary); white-space: nowrap;">10-Tick History:</span>
+                  {#each debugHistory as entry, idx}
+                    <button
+                      type="button"
+                      class="subtab-btn"
+                      style="padding: 3px 8px; font-size: 10.5px; border: 1px solid var(--border-color);"
+                      class:active={(selectedTickIndex === idx) || (selectedTickIndex === -1 && idx === debugHistory.length - 1)}
+                      onclick={() => { selectedTickIndex = idx; debugPaused = true; }}
+                    >
+                      #{idx + 1} ({entry.time})
+                    </button>
+                  {/each}
+                </div>
+              {/if}
+
+              {#if activeDebugEntry && activeDebugEntry.info}
+                {@const info = activeDebugEntry.info}
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 14px;">
                   <div class="debug-metric-card">
                     <span class="debug-label">Engine Mode</span>
-                    <strong class="debug-value">Mode {debugInfo.engine_mode} ({debugInfo.engine_name})</strong>
+                    <strong class="debug-value">Mode {info.engine_mode} ({info.engine_name})</strong>
                   </div>
                   <div class="debug-metric-card">
                     <span class="debug-label">Process Elevation</span>
-                    <strong class="debug-value">{debugInfo.is_elevated ? "🛡️ ADMIN (Elevated)" : "👤 USER (Non-Admin)"}</strong>
+                    <strong class="debug-value">{info.is_elevated ? "🛡️ ADMIN (Elevated)" : "👤 USER (Non-Admin)"}</strong>
                   </div>
                   <div class="debug-metric-card">
                     <span class="debug-label">ETW Thread State</span>
-                    <strong class="debug-value">{debugInfo.etw_active ? "🟢 ACTIVE (Running)" : "🔴 INACTIVE"}</strong>
+                    <strong class="debug-value">{info.etw_active ? "🟢 ACTIVE (Running)" : "🔴 INACTIVE"}</strong>
                   </div>
                   <div class="debug-metric-card">
                     <span class="debug-label">ETW Packets / Sec</span>
-                    <strong class="debug-value">{debugInfo.etw_events_last_sec.toLocaleString()} pkts/s</strong>
+                    <strong class="debug-value">{info.etw_events_last_sec.toLocaleString()} pkts/s</strong>
                   </div>
                   <div class="debug-metric-card">
                     <span class="debug-label">ETW Captured Speed</span>
-                    <strong class="debug-value">{formatSpeed(debugInfo.etw_bytes_last_sec, 'B')}</strong>
+                    <strong class="debug-value">{formatSpeed(info.etw_bytes_last_sec, 'B')}</strong>
                   </div>
                   <div class="debug-metric-card">
                     <span class="debug-label">NIC Hardware Speed</span>
-                    <strong class="debug-value">{formatSpeed(debugInfo.nic_rx_bytes_last_sec, 'B')}</strong>
+                    <strong class="debug-value">{formatSpeed(info.nic_rx_bytes_last_sec, 'B')}</strong>
                   </div>
                 </div>
 
-                {#if debugInfo.raw_etw_pid_samples && debugInfo.raw_etw_pid_samples.length > 0}
-                  <h5 style="margin: 10px 0 6px 0; font-size: 12px; color: var(--text-primary);">Active Captured Processes ({debugInfo.active_etw_pids})</h5>
+                {#if info.raw_etw_pid_samples && info.raw_etw_pid_samples.length > 0}
+                  <h5 style="margin: 10px 0 6px 0; font-size: 12px; color: var(--text-primary);">
+                    Active Captured Processes at {activeDebugEntry.time} ({info.active_etw_pids})
+                  </h5>
                   <div style="max-height: 180px; overflow-y: auto; background: var(--widget-hover-bg); border-radius: 6px; padding: 8px;">
                     <table style="width: 100%; font-size: 11px; text-align: left; border-collapse: collapse;">
                       <thead>
@@ -755,7 +801,7 @@
                         </tr>
                       </thead>
                       <tbody>
-                        {#each debugInfo.raw_etw_pid_samples as [pid, exe, rx, tx]}
+                        {#each info.raw_etw_pid_samples as [pid, exe, rx, tx]}
                           <tr style="border-bottom: 1px solid var(--border-color);">
                             <td style="padding: 4px; font-family: monospace;">{pid}</td>
                             <td style="padding: 4px; font-weight: 600; color: var(--text-primary);">{exe}</td>
@@ -768,7 +814,7 @@
                   </div>
                 {:else}
                   <div style="font-size: 11px; color: var(--text-secondary); font-style: italic; margin-top: 8px;">
-                    No active process deltas captured on last tick. (Stream video or browse web to inspect packet streams)
+                    No active process deltas captured at {activeDebugEntry.time}. (Stream video or browse web to inspect packet streams)
                   </div>
                 {/if}
               {/if}
