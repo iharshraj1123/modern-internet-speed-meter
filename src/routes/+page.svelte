@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import { listen } from "@tauri-apps/api/event";
   import { invoke } from "@tauri-apps/api/core";
-  import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
   import { settings, formatSpeed } from "../lib/settingsStore";
 
   // State cache for speeds
@@ -188,11 +188,104 @@
 
     // Sync initial settings to backend
     settings.syncWithBackend($settings);
+
+    // Listen for native window resize events to save custom expanded dimensions
+    try {
+      unlistenResize = await getCurrentWindow().onResized(() => {
+        saveCurrentDimensionsIfExpanded();
+      });
+    } catch (e) {
+      console.error("Failed to attach resize listener", e);
+    }
   });
 
   onDestroy(() => {
     document.removeEventListener("contextmenu", handleContextMenu);
     if (unlistenStats) unlistenStats();
+    if (unlistenResize) unlistenResize();
+  });
+
+  const COLLAPSED_HEIGHT = 34;
+  const DEFAULT_EXPANDED_WIDTH = 230;
+  const DEFAULT_EXPANDED_HEIGHT = 80;
+
+  let prevGraphType = $state(null);
+  let unlistenResize = null;
+
+  async function saveCurrentDimensionsIfExpanded() {
+    if ($settings.graphType === 'hidden') return;
+    try {
+      const appWindow = getCurrentWindow();
+      const size = await appWindow.outerSize();
+      const factor = await appWindow.scaleFactor().catch(() => 1);
+      const w = Math.round(size.width / factor);
+      const h = Math.round(size.height / factor);
+      if (w > 50 && h > 45) {
+        localStorage.setItem('saved_widget_dimensions', JSON.stringify({ width: w, height: h }));
+      }
+    } catch (e) {
+      console.error("Failed to save widget dimensions", e);
+    }
+  }
+
+  async function updateWindowSizeForGraphType(oldType, newType) {
+    try {
+      const appWindow = getCurrentWindow();
+      const factor = await appWindow.scaleFactor().catch(() => 1);
+      const currentSize = await appWindow.outerSize();
+      const currentWidth = Math.round(currentSize.width / factor);
+
+      if (newType === 'hidden') {
+        // Save current dimensions before collapsing if coming from an expanded mode
+        if (oldType && oldType !== 'hidden') {
+          const currentHeight = Math.round(currentSize.height / factor);
+          if (currentWidth > 50 && currentHeight > 45) {
+            localStorage.setItem('saved_widget_dimensions', JSON.stringify({
+              width: currentWidth,
+              height: currentHeight
+            }));
+          }
+        }
+        await appWindow.setSize(new LogicalSize(currentWidth, COLLAPSED_HEIGHT));
+      } else if (oldType === 'hidden') {
+        // Revert back from hidden to expanded mode
+        let targetWidth = DEFAULT_EXPANDED_WIDTH;
+        let targetHeight = DEFAULT_EXPANDED_HEIGHT;
+
+        const saved = localStorage.getItem('saved_widget_dimensions');
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (parsed.width && parsed.height) {
+              targetWidth = parsed.width;
+              targetHeight = parsed.height;
+            }
+          } catch (e) {
+            console.error("Failed to parse saved widget dimensions", e);
+          }
+        }
+
+        await appWindow.setSize(new LogicalSize(targetWidth, targetHeight));
+      }
+    } catch (err) {
+      console.error("Failed to adjust window size on graphType change", err);
+    }
+  }
+
+  $effect(() => {
+    const currentType = $settings.graphType;
+    if (prevGraphType === null) {
+      prevGraphType = currentType;
+      if (currentType === 'hidden') {
+        updateWindowSizeForGraphType(null, 'hidden');
+      }
+      return;
+    }
+
+    if (prevGraphType !== currentType) {
+      updateWindowSizeForGraphType(prevGraphType, currentType);
+      prevGraphType = currentType;
+    }
   });
 
   // Calculate dynamic smooth peak scaling for graphs to prevent scale popping
