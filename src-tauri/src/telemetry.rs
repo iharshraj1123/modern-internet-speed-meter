@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
 use chrono::Local;
 use once_cell::sync::Lazy;
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 use std::sync::Mutex;
 use windows::core::GUID;
 use windows::Win32::System::Diagnostics::Etw::{
@@ -179,6 +179,56 @@ pub struct EtwPidMetrics {
 static ETW_PID_STATS: Lazy<Mutex<HashMap<u32, EtwPidMetrics>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 static ETW_ACTIVE: AtomicBool = AtomicBool::new(false);
 static TELEMETRY_ENGINE_MODE: AtomicU8 = AtomicU8::new(1); // 0 = io, 1 = estats (default), 2 = etw
+static ETW_EVENT_COUNT: AtomicU64 = AtomicU64::new(0);
+static ETW_BYTE_COUNT: AtomicU64 = AtomicU64::new(0);
+
+static LAST_DEBUG_INFO: Lazy<Mutex<TelemetryDebugInfo>> = Lazy::new(|| {
+    Mutex::new(TelemetryDebugInfo {
+        engine_mode: 1,
+        engine_name: "TCP EStats".to_string(),
+        is_elevated: false,
+        etw_active: false,
+        etw_events_last_sec: 0,
+        etw_bytes_last_sec: 0,
+        nic_rx_bytes_last_sec: 0,
+        nic_tx_bytes_last_sec: 0,
+        active_etw_pids: 0,
+        raw_etw_pid_samples: Vec::new(),
+    })
+});
+
+#[derive(serde::Serialize, Clone, Debug)]
+pub struct TelemetryDebugInfo {
+    pub engine_mode: u8,
+    pub engine_name: String,
+    pub is_elevated: bool,
+    pub etw_active: bool,
+    pub etw_events_last_sec: u64,
+    pub etw_bytes_last_sec: u64,
+    pub nic_rx_bytes_last_sec: u64,
+    pub nic_tx_bytes_last_sec: u64,
+    pub active_etw_pids: usize,
+    pub raw_etw_pid_samples: Vec<(u32, String, u64, u64)>,
+}
+
+pub fn get_telemetry_debug_info() -> TelemetryDebugInfo {
+    if let Ok(guard) = LAST_DEBUG_INFO.lock() {
+        guard.clone()
+    } else {
+        TelemetryDebugInfo {
+            engine_mode: get_telemetry_engine_mode(),
+            engine_name: "Unknown".to_string(),
+            is_elevated: is_elevated(),
+            etw_active: ETW_ACTIVE.load(Ordering::Relaxed),
+            etw_events_last_sec: 0,
+            etw_bytes_last_sec: 0,
+            nic_rx_bytes_last_sec: 0,
+            nic_tx_bytes_last_sec: 0,
+            active_etw_pids: 0,
+            raw_etw_pid_samples: Vec::new(),
+        }
+    }
+}
 
 const KERNEL_NETWORK_PROVIDER_GUID: GUID = GUID::from_u128(0x7dd42a49_5329_4832_8dfd_43d979153a88);
 
@@ -342,6 +392,8 @@ unsafe extern "system" fn etw_event_callback(event_record: *mut EVENT_RECORD) {
     let is_tx = id == 10 || id == 12 || id == 42;
 
     if (is_rx || is_tx) && bytes > 0 {
+        ETW_EVENT_COUNT.fetch_add(1, Ordering::Relaxed);
+        ETW_BYTE_COUNT.fetch_add(bytes, Ordering::Relaxed);
         if let Ok(mut map) = ETW_PID_STATS.lock() {
             let entry = map.entry(pid).or_default();
             if is_rx {
@@ -923,6 +975,34 @@ impl TelemetryService {
                             upload_speed: sys_up,
                         });
                     }
+                }
+
+                // Populate live telemetry debug info
+                let etw_events_sec = ETW_EVENT_COUNT.swap(0, Ordering::Relaxed);
+                let etw_bytes_sec = ETW_BYTE_COUNT.swap(0, Ordering::Relaxed);
+
+                let mut debug_samples = Vec::new();
+                for (pid, proc_rx_raw) in &pid_rx_delta {
+                    let proc_tx_raw = pid_tx_delta.get(pid).copied().unwrap_or(0);
+                    let exe = process_name_cache.get(pid).cloned().unwrap_or_else(|| "Unknown".to_string());
+                    debug_samples.push((*pid, exe, *proc_rx_raw, proc_tx_raw));
+                }
+
+                if let Ok(mut guard) = LAST_DEBUG_INFO.lock() {
+                    guard.engine_mode = engine_mode;
+                    guard.engine_name = match engine_mode {
+                        0 => "Process I/O",
+                        2 => "Kernel ETW Tracing",
+                        _ => "TCP EStats",
+                    }.to_string();
+                    guard.is_elevated = is_elevated();
+                    guard.etw_active = ETW_ACTIVE.load(Ordering::Relaxed);
+                    guard.etw_events_last_sec = etw_events_sec;
+                    guard.etw_bytes_last_sec = etw_bytes_sec;
+                    guard.nic_rx_bytes_last_sec = rx_diff;
+                    guard.nic_tx_bytes_last_sec = tx_diff;
+                    guard.active_etw_pids = pid_rx_delta.len();
+                    guard.raw_etw_pid_samples = debug_samples;
                 }
 
                 // ── 3. Active foreground app & screen-time tracking ──────────

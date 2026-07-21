@@ -1,8 +1,8 @@
 <script>
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { openUrl } from "@tauri-apps/plugin-opener";
-  import { settings, ACCENT_COLORS } from "../../lib/settingsStore";
+  import { settings, ACCENT_COLORS, formatSpeed } from "../../lib/settingsStore";
 
   let activeTab = $state("general");
   let appearanceSubTab = $state("theme"); // 'theme' or 'graph'
@@ -15,6 +15,18 @@
   let vacuumSuccess = $state(false);
   let rawRetention = $state(7);
   let hourlyRetention = $state(90);
+
+  // Live Debug Inspector states
+  let debugInfo = $state(null);
+  let debugInterval;
+
+  async function fetchDebugInfo() {
+    try {
+      debugInfo = await invoke("get_telemetry_debug_info");
+    } catch (err) {
+      console.error("Failed to query debug info", err);
+    }
+  }
 
   // Hotkey states
   let recordingHotkey = $state(false);
@@ -96,6 +108,12 @@
     } catch (e) {
       console.error("Elevation check failed", e);
     }
+    fetchDebugInfo();
+    debugInterval = setInterval(fetchDebugInfo, 1000);
+  });
+
+  onDestroy(() => {
+    if (debugInterval) clearInterval(debugInterval);
   });
 
   async function handleAutostartToggle(e) {
@@ -689,6 +707,73 @@
               </div>
             </div>
 
+            <!-- Live Telemetry Engine Debug Inspector -->
+            <div class="engine-explanation-box" style="margin-top: 16px; border-color: var(--accent-emerald);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h4 style="margin: 0; color: var(--accent-emerald);">🔍 Live Telemetry Engine Debugger</h4>
+                <button class="action-btn-styled" style="padding: 4px 10px; font-size: 11px;" onclick={fetchDebugInfo}>Refresh Live</button>
+              </div>
+
+              {#if debugInfo}
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 14px;">
+                  <div class="debug-metric-card">
+                    <span class="debug-label">Engine Mode</span>
+                    <strong class="debug-value">Mode {debugInfo.engine_mode} ({debugInfo.engine_name})</strong>
+                  </div>
+                  <div class="debug-metric-card">
+                    <span class="debug-label">Process Elevation</span>
+                    <strong class="debug-value">{debugInfo.is_elevated ? "🛡️ ADMIN (Elevated)" : "👤 USER (Non-Admin)"}</strong>
+                  </div>
+                  <div class="debug-metric-card">
+                    <span class="debug-label">ETW Thread State</span>
+                    <strong class="debug-value">{debugInfo.etw_active ? "🟢 ACTIVE (Running)" : "🔴 INACTIVE"}</strong>
+                  </div>
+                  <div class="debug-metric-card">
+                    <span class="debug-label">ETW Packets / Sec</span>
+                    <strong class="debug-value">{debugInfo.etw_events_last_sec.toLocaleString()} pkts/s</strong>
+                  </div>
+                  <div class="debug-metric-card">
+                    <span class="debug-label">ETW Captured Speed</span>
+                    <strong class="debug-value">{formatSpeed(debugInfo.etw_bytes_last_sec, 'B')}</strong>
+                  </div>
+                  <div class="debug-metric-card">
+                    <span class="debug-label">NIC Hardware Speed</span>
+                    <strong class="debug-value">{formatSpeed(debugInfo.nic_rx_bytes_last_sec, 'B')}</strong>
+                  </div>
+                </div>
+
+                {#if debugInfo.raw_etw_pid_samples && debugInfo.raw_etw_pid_samples.length > 0}
+                  <h5 style="margin: 10px 0 6px 0; font-size: 12px; color: var(--text-primary);">Active Captured Processes ({debugInfo.active_etw_pids})</h5>
+                  <div style="max-height: 180px; overflow-y: auto; background: var(--widget-hover-bg); border-radius: 6px; padding: 8px;">
+                    <table style="width: 100%; font-size: 11px; text-align: left; border-collapse: collapse;">
+                      <thead>
+                        <tr style="border-bottom: 1px solid var(--border-color); color: var(--text-secondary);">
+                          <th style="padding: 4px;">PID</th>
+                          <th style="padding: 4px;">Executable</th>
+                          <th style="padding: 4px;">Rx Bytes / s</th>
+                          <th style="padding: 4px;">Tx Bytes / s</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {#each debugInfo.raw_etw_pid_samples as [pid, exe, rx, tx]}
+                          <tr style="border-bottom: 1px solid var(--border-color);">
+                            <td style="padding: 4px; font-family: monospace;">{pid}</td>
+                            <td style="padding: 4px; font-weight: 600; color: var(--text-primary);">{exe}</td>
+                            <td style="padding: 4px;">{formatSpeed(rx, 'B')}</td>
+                            <td style="padding: 4px;">{formatSpeed(tx, 'B')}</td>
+                          </tr>
+                        {/each}
+                      </tbody>
+                    </table>
+                  </div>
+                {:else}
+                  <div style="font-size: 11px; color: var(--text-secondary); font-style: italic; margin-top: 8px;">
+                    No active process deltas captured on last tick. (Stream video or browse web to inspect packet streams)
+                  </div>
+                {/if}
+              {/if}
+            </div>
+
           {:else if telemetrySubTab === 'limits'}
             <div class="setting-item">
               <div class="setting-info">
@@ -921,6 +1006,26 @@
 {/if}
 
 <style>
+  .debug-metric-card {
+    background: var(--widget-hover-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .debug-label {
+    font-size: 10px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .debug-value {
+    font-size: 12px;
+    color: var(--text-primary);
+  }
+
   .subtabs-bar {
     display: flex;
     gap: 8px;

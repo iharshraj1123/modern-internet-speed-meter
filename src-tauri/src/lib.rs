@@ -52,6 +52,12 @@ fn set_telemetry_engine(engine: String) {
     telemetry::set_telemetry_engine(&engine);
 }
 
+// Tauri command: Get detailed real-time telemetry debug state for live inspection
+#[tauri::command]
+fn get_telemetry_debug_info() -> telemetry::TelemetryDebugInfo {
+    telemetry::get_telemetry_debug_info()
+}
+
 // Tauri command: Get historical telemetry metrics (hourly, daily, weekly, monthly, yearly)
 #[tauri::command]
 async fn get_historical_stats(period: String) -> Result<Vec<db::ProcessStat>, String> {
@@ -473,6 +479,7 @@ pub fn run() {
             is_process_elevated,
             restart_as_admin,
             set_telemetry_engine,
+            get_telemetry_debug_info,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
