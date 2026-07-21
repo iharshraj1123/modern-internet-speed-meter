@@ -670,8 +670,8 @@
     --widget-hover-bg: rgba(15, 15, 18, 0.82);
     --widget-border: rgba(255, 255, 255, 0.08);
     --widget-hover-border: rgba(16, 185, 129, 0.25);
-    --text-color: #f3f4f6;
-    --text-sec: #9ca3af;
+    --text-color: #e2e8f0;
+    --text-sec: #94a3b8;
     --metric-down: #10b981;    /* green = download */
     --metric-up: #60a5fa;      /* blue  = upload   */
     --battery-bg: rgba(255, 255, 255, 0.06);

@@ -739,19 +739,19 @@
 <style>
   :global(html) {
     /* DEFAULT/LIGHT THEME VARIABLES */
-    --bg-color: #f8fafc;
+    --bg-color: #f1f5f9;
     --panel-bg: radial-gradient(circle at top right, rgba(16, 185, 129, 0.04), transparent 45%);
     --text-primary: #0f172a;
     --text-secondary: #475569;
     --border-color: rgba(15, 23, 42, 0.08);
-    --card-bg: #ffffff;
+    --card-bg: #f8fafc;
     --card-border: rgba(15, 23, 42, 0.06);
     --card-shadow: 0 4px 12px rgba(15, 23, 42, 0.03);
     --btn-bg: rgba(15, 23, 42, 0.04);
     --btn-border: rgba(15, 23, 42, 0.08);
     --btn-hover: rgba(15, 23, 42, 0.08);
-    --table-header: #f1f5f9;
-    --table-header-hover: #e2e8f0;
+    --table-header: #e2e8f0;
+    --table-header-hover: #cbd5e1;
     --table-border: rgba(15, 23, 42, 0.04);
     --table-row-hover: rgba(15, 23, 42, 0.01);
     --app-title: #1e293b;
@@ -767,8 +767,8 @@
       /* SYSTEM DEFAULT DARK THEME VARIABLES */
       --bg-color: #0c0d12;
       --panel-bg: radial-gradient(circle at top right, rgba(16, 185, 129, 0.05), transparent 40%);
-      --text-primary: #ffffff;
-      --text-secondary: #9ca3af;
+      --text-primary: #e2e8f0;
+      --text-secondary: #94a3b8;
       --border-color: rgba(255, 255, 255, 0.08);
       --card-bg: rgba(255, 255, 255, 0.03);
       --card-border: rgba(255, 255, 255, 0.05);
@@ -780,7 +780,7 @@
       --table-header-hover: #1e212b;
       --table-border: rgba(255, 255, 255, 0.06);
       --table-row-hover: rgba(255, 255, 255, 0.02);
-      --app-title: #ffffff;
+      --app-title: #e2e8f0;
       --progress-bg: rgba(255, 255, 255, 0.06);
       --accent-emerald: #34d399;
       --accent-blue: #60a5fa;
@@ -791,19 +791,19 @@
 
   :global(html[data-theme="light"]) {
     /* EXPLICIT LIGHT THEME OVERRIDES */
-    --bg-color: #f8fafc;
+    --bg-color: #f1f5f9;
     --panel-bg: radial-gradient(circle at top right, rgba(16, 185, 129, 0.04), transparent 45%);
     --text-primary: #0f172a;
     --text-secondary: #475569;
     --border-color: rgba(15, 23, 42, 0.08);
-    --card-bg: #ffffff;
+    --card-bg: #f8fafc;
     --card-border: rgba(15, 23, 42, 0.06);
     --card-shadow: 0 4px 12px rgba(15, 23, 42, 0.03);
     --btn-bg: rgba(15, 23, 42, 0.04);
     --btn-border: rgba(15, 23, 42, 0.08);
     --btn-hover: rgba(15, 23, 42, 0.08);
-    --table-header: #f1f5f9;
-    --table-header-hover: #e2e8f0;
+    --table-header: #e2e8f0;
+    --table-header-hover: #cbd5e1;
     --table-border: rgba(15, 23, 42, 0.04);
     --table-row-hover: rgba(15, 23, 42, 0.01);
     --app-title: #1e293b;
@@ -818,8 +818,8 @@
     /* EXPLICIT DARK THEME OVERRIDES */
     --bg-color: #0c0d12;
     --panel-bg: radial-gradient(circle at top right, rgba(16, 185, 129, 0.05), transparent 40%);
-    --text-primary: #ffffff;
-    --text-secondary: #9ca3af;
+    --text-primary: #e2e8f0;
+    --text-secondary: #94a3b8;
     --border-color: rgba(255, 255, 255, 0.08);
     --card-bg: rgba(255, 255, 255, 0.03);
     --card-border: rgba(255, 255, 255, 0.05);
@@ -831,7 +831,7 @@
     --table-header-hover: #1e212b;
     --table-border: rgba(255, 255, 255, 0.06);
     --table-row-hover: rgba(255, 255, 255, 0.02);
-    --app-title: #ffffff;
+    --app-title: #e2e8f0;
     --progress-bg: rgba(255, 255, 255, 0.06);
     --accent-emerald: #34d399;
     --accent-blue: #60a5fa;

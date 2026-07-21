@@ -707,17 +707,17 @@
 <style>
   :global(html) {
     /* DEFAULT/LIGHT THEME VARIABLES */
-    --bg-color: #f8fafc;
+    --bg-color: #f1f5f9;
     --text-primary: #0f172a;
     --text-secondary: #475569;
     --border-color: rgba(15, 23, 42, 0.08);
-    --card-bg: #ffffff;
+    --card-bg: #f8fafc;
     --card-border: rgba(15, 23, 42, 0.06);
     --sidebar-border: rgba(15, 23, 42, 0.08);
     --btn-bg: rgba(15, 23, 42, 0.04);
     --btn-border: rgba(15, 23, 42, 0.08);
     --btn-hover: rgba(15, 23, 42, 0.08);
-    --input-bg: #ffffff;
+    --input-bg: #f8fafc;
     --input-border: rgba(15, 23, 42, 0.15);
     --input-focus: #059669;
     --switch-bg: rgba(15, 23, 42, 0.1);
@@ -729,8 +729,8 @@
     :global(html) {
       /* SYSTEM DEFAULT DARK THEME VARIABLES */
       --bg-color: #0c0d12;
-      --text-primary: #ffffff;
-      --text-secondary: #9ca3af;
+      --text-primary: #e2e8f0;
+      --text-secondary: #94a3b8;
       --border-color: rgba(255, 255, 255, 0.08);
       --card-bg: rgba(255, 255, 255, 0.03);
       --card-border: rgba(255, 255, 255, 0.05);
@@ -749,17 +749,17 @@
 
   :global(html[data-theme="light"]) {
     /* EXPLICIT LIGHT THEME OVERRIDES */
-    --bg-color: #f8fafc;
+    --bg-color: #f1f5f9;
     --text-primary: #0f172a;
     --text-secondary: #475569;
     --border-color: rgba(15, 23, 42, 0.08);
-    --card-bg: #ffffff;
+    --card-bg: #f8fafc;
     --card-border: rgba(15, 23, 42, 0.06);
     --sidebar-border: rgba(15, 23, 42, 0.08);
     --btn-bg: rgba(15, 23, 42, 0.04);
     --btn-border: rgba(15, 23, 42, 0.08);
     --btn-hover: rgba(15, 23, 42, 0.08);
-    --input-bg: #ffffff;
+    --input-bg: #f8fafc;
     --input-border: rgba(15, 23, 42, 0.15);
     --input-focus: #059669;
     --switch-bg: rgba(15, 23, 42, 0.1);
@@ -770,8 +770,8 @@
   :global(html[data-theme="dark"]) {
     /* EXPLICIT DARK THEME OVERRIDES */
     --bg-color: #0c0d12;
-    --text-primary: #ffffff;
-    --text-secondary: #9ca3af;
+    --text-primary: #e2e8f0;
+    --text-secondary: #94a3b8;
     --border-color: rgba(255, 255, 255, 0.08);
     --card-bg: rgba(255, 255, 255, 0.03);
     --card-border: rgba(255, 255, 255, 0.05);
