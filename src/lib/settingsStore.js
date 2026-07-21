@@ -24,7 +24,7 @@ const DEFAULT_SETTINGS = {
     globalHotkey: 'Ctrl+Shift+S',
     showPing: true,
     showWidgetPeak: true,
-    showWidgetData: false
+    filterWidgetNoise: true
 };
 
 // Accent color palette definitions

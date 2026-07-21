@@ -448,15 +448,15 @@
 
             <div class="setting-item">
               <div class="setting-info">
-                <label for="showWidgetData">Show Real-Time Speed & Graph in Widget</label>
-                <span>Display live throughput metrics and dynamic chart movements on the desktop widget</span>
+                <label for="filterWidgetNoise">Filter Sub-Unit Background Noise in Widget</label>
+                <span>Suppress minor background telemetry (&lt; 1 KB/s or &lt; 1 Kbps) to keep widget UI clean and distraction-free</span>
               </div>
               <label class="switch">
                 <input 
-                  id="showWidgetData" 
+                  id="filterWidgetNoise" 
                   type="checkbox" 
-                  checked={$settings.showWidgetData ?? false} 
-                  onchange={(e) => updateSetting("showWidgetData", e.target.checked)} 
+                  checked={$settings.filterWidgetNoise ?? true} 
+                  onchange={(e) => updateSetting("filterWidgetNoise", e.target.checked)} 
                 />
                 <span class="slider"></span>
               </label>

@@ -322,13 +322,37 @@
     }
   });
 
-  // Widget active speed and history derived state (flattened to 0 by default unless showWidgetData is true)
-  let activeDownSpeed = $derived($settings.showWidgetData ? downloadSpeed : 0);
-  let activeUpSpeed = $derived($settings.showWidgetData ? uploadSpeed : 0);
+  // Calculate sub-unit minimum threshold based on selected unit standard
+  let noiseThreshold = $derived.by(() => {
+    const u = $settings.unit;
+    if (u === 'iB') return 1024; // 1 KiB/s (1024 Bytes/s)
+    if (u === 'ib') return 128;  // 1 Kibps (1024 bits/s = 128 Bytes/s)
+    if (u === 'b') return 125;   // 1 Kbps (1000 bits/s = 125 Bytes/s)
+    return 1000;                 // 1 KB/s (1000 Bytes/s - DEFAULT)
+  });
 
-  const ZERO_HISTORY = Array(20).fill(0);
-  let activeDownHistory = $derived($settings.showWidgetData ? downloadHistory : ZERO_HISTORY);
-  let activeUpHistory = $derived($settings.showWidgetData ? uploadHistory : ZERO_HISTORY);
+  // Widget active speed and history derived state (sub-unit noise filtered by default if filterWidgetNoise is true)
+  let activeDownSpeed = $derived(
+    ($settings.filterWidgetNoise ?? true)
+      ? (downloadSpeed >= noiseThreshold ? downloadSpeed : 0)
+      : downloadSpeed
+  );
+  let activeUpSpeed = $derived(
+    ($settings.filterWidgetNoise ?? true)
+      ? (uploadSpeed >= noiseThreshold ? uploadSpeed : 0)
+      : uploadSpeed
+  );
+
+  let activeDownHistory = $derived(
+    ($settings.filterWidgetNoise ?? true)
+      ? downloadHistory.map(val => val >= noiseThreshold ? val : 0)
+      : downloadHistory
+  );
+  let activeUpHistory = $derived(
+    ($settings.filterWidgetNoise ?? true)
+      ? uploadHistory.map(val => val >= noiseThreshold ? val : 0)
+      : uploadHistory
+  );
 
   // Calculate dynamic smooth peak scaling for graphs to prevent scale popping
   let smoothMaxDown = $state(1024);
