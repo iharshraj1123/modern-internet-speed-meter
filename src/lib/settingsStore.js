@@ -122,34 +122,34 @@ export function formatSpeed(bytesPerSec, unitType) {
     if (unitType === 'b') {
         // Bits/sec (decimal)
         const bits = bytesPerSec * 8;
-        if (bits < 1000) return `${bits.toFixed(0)} bps`;
+        if (bits < 1000) return `${Math.round(bits)} bps`;
         const kbps = bits / 1000;
-        if (kbps < 1000) return `${kbps.toFixed(1)} Kbps`;
+        if (kbps < 1000) return `${Math.round(kbps)} Kbps`;
         const mbps = kbps / 1000;
         if (mbps < 1000) return `${mbps.toFixed(1)} Mbps`;
         return `${(mbps / 1000).toFixed(1)} Gbps`;
     } else if (unitType === 'ib') {
         // Binary Bits/sec (kibps, mibps)
         const bits = bytesPerSec * 8;
-        if (bits < 1024) return `${bits.toFixed(0)} bps`;
+        if (bits < 1024) return `${Math.round(bits)} bps`;
         const kibps = bits / 1024;
-        if (kibps < 1024) return `${kibps.toFixed(1)} Kibps`;
+        if (kibps < 1024) return `${Math.round(kibps)} Kibps`;
         const mibps = kibps / 1024;
         if (mibps < 1024) return `${mibps.toFixed(1)} Mibps`;
         return `${(mibps / 1024).toFixed(1)} Gibps`;
     } else if (unitType === 'iB') {
         // Binary Bytes/sec (KiB, MiB)
-        if (bytesPerSec < 1024) return `${bytesPerSec.toFixed(0)} B/s`;
+        if (bytesPerSec < 1024) return `${Math.round(bytesPerSec)} B/s`;
         const kib = bytesPerSec / 1024;
-        if (kib < 1024) return `${kib.toFixed(1)} KiB/s`;
+        if (kib < 1024) return `${Math.round(kib)} KiB/s`;
         const mib = kib / 1024;
         if (mib < 1024) return `${mib.toFixed(1)} MiB/s`;
         return `${(mib / 1024).toFixed(1)} GiB/s`;
     } else {
         // Decimal Bytes/sec (KB, MB) - DEFAULT
-        if (bytesPerSec < 1000) return `${bytesPerSec.toFixed(0)} B/s`;
+        if (bytesPerSec < 1000) return `${Math.round(bytesPerSec)} B/s`;
         const kb = bytesPerSec / 1000;
-        if (kb < 1000) return `${kb.toFixed(1)} KB/s`;
+        if (kb < 1000) return `${Math.round(kb)} KB/s`;
         const mb = kb / 1000;
         if (mb < 1000) return `${mb.toFixed(1)} MB/s`;
         return `${(mb / 1000).toFixed(1)} GB/s`;
