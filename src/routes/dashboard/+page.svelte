@@ -59,11 +59,11 @@
   );
 
   let qualityBadge = $derived.by(() => {
-    if (avgPing === 0) return { label: "Ready to Test", icon: "⚡", class: "neutral" };
-    if (avgPing < 25) return { label: "Gaming & 4K Ultra Ready", icon: "🎮", class: "excellent" };
-    if (avgPing < 60) return { label: "Streaming & Video Calls Ready", icon: "📺", class: "good" };
-    if (avgPing < 120) return { label: "Web Browsing Standard", icon: "🌐", class: "fair" };
-    return { label: "High Latency Connection", icon: "⚠️", class: "poor" };
+    if (avgPing === 0) return { label: "Ready to Test", type: "neutral", class: "neutral" };
+    if (avgPing < 25) return { label: "Gaming & 4K Ultra Ready", type: "excellent", class: "excellent" };
+    if (avgPing < 60) return { label: "Streaming & Video Calls Ready", type: "good", class: "good" };
+    if (avgPing < 120) return { label: "Web Browsing Standard", type: "fair", class: "fair" };
+    return { label: "High Latency Connection", type: "poor", class: "poor" };
   });
 
   $effect(() => {
@@ -441,18 +441,26 @@
   <!-- Top Bar -->
   <header class="header">
     <div class="title-group">
-      <h1>📊 System Analytics & Data Usage</h1>
+      <h1 class="page-title"><svg class="title-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> System Analytics & Data Usage</h1>
       <p>Hourly, daily, and long-term telemetry metrics</p>
     </div>
     <div class="actions-group">
       <button class="action-btn group-btn" class:active-group={groupApps} onclick={() => groupApps = !groupApps} title="Toggle process grouping by application name">
-        {groupApps ? "🔗 Grouped" : "⛓️ Individual"}
+        {#if groupApps}
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          Grouped
+        {:else}
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>
+          Individual
+        {/if}
       </button>
       <button class="action-btn settings-btn" onclick={openSettings} title="Open settings">
-        ⚙️ Settings
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+        Settings
       </button>
       <button class="action-btn speedtest-btn" onclick={() => showSpeedTestModal = true} title="Run Network Speed Test & Multi-DNS Latency">
-        ⚡ Speed Test
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        Speed Test
       </button>
       <button class="action-btn close-btn" onclick={closeWindow} title="Close window">
         ✕ Close
@@ -462,7 +470,7 @@
 
   <!-- Period Filters -->
   <div class="period-bar">
-    <button class:active={period === 'live'} onclick={() => handlePeriodChange('live')}>🟢 Live</button>
+    <button class:active={period === 'live'} onclick={() => handlePeriodChange('live')}><span class="live-dot-icon"></span> Live</button>
     <button class:active={period === 'daily'} onclick={() => handlePeriodChange('daily')}>Today</button>
     <button class:active={period === 'hourly'} onclick={() => handlePeriodChange('hourly')}>Last 24 Hrs</button>
     <button class:active={period === 'weekly'} onclick={() => handlePeriodChange('weekly')}>Weekly</button>
@@ -483,7 +491,10 @@
       </div>
       <div class="card time-card">
         <span class="card-label">Active Focus Application</span>
-        <span class="card-val app-focus-text">🖥️ {liveActiveApp}</span>
+        <span class="card-val app-focus-text">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          {liveActiveApp}
+        </span>
       </div>
     {:else}
       <div class="card up-card">
@@ -496,7 +507,10 @@
       </div>
       <div class="card time-card">
         <span class="card-label">Total Screen Time</span>
-        <span class="card-val time-text">⏱ {formatDuration(totalScreenTime)}</span>
+        <span class="card-val time-text">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          {formatDuration(totalScreenTime)}
+        </span>
       </div>
     {/if}
   </section>
@@ -570,13 +584,19 @@
       </div>
     {:else if errorMsg}
       <div class="state-container error">
-        <p>⚠️ {errorMsg}</p>
+        <p>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          {errorMsg}
+        </p>
         <button class="action-btn" onclick={loadStats}>Retry</button>
       </div>
     {:else}
       {#if sortedList.length === 0}
         <div class="state-container empty">
-          <p>📁 No activity recorded yet for this session/period.</p>
+          <p>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            No activity recorded yet for this session/period.
+          </p>
           <small>Start loading pages or focusing windows to record statistics.</small>
         </div>
       {:else}
@@ -615,7 +635,9 @@
                 {@const pct = grandTotalBytes > 0 ? (appTotal / grandTotalBytes) * 100 : 0}
                 <tr>
                   <td class="app-cell">
-                    <span class="app-icon">💻</span>
+                    <span class="app-icon">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><circle cx="6" cy="7" r="1"/><circle cx="10" cy="7" r="1"/></svg>
+                    </span>
                     <span class="app-title">{item.process_name || 'System'}</span>
                   </td>
                   {#if period === 'live'}
@@ -646,8 +668,24 @@
     <div class="speedtest-modal">
       <header class="modal-header">
         <div class="modal-title-group">
-          <h2>⚡ Network Speedometer & Latency</h2>
-          <span class="badge {qualityBadge.class}">{qualityBadge.icon} {qualityBadge.label}</span>
+          <h2>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            Network Speedometer & Latency
+          </h2>
+          <span class="badge {qualityBadge.class}">
+            {#if qualityBadge.type === 'excellent'}
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2z"/></svg>
+            {:else if qualityBadge.type === 'good'}
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"/><polyline points="17 2 12 7 7 2"/></svg>
+            {:else if qualityBadge.type === 'fair'}
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            {:else if qualityBadge.type === 'poor'}
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            {:else}
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            {/if}
+            {qualityBadge.label}
+          </span>
         </div>
         <button class="modal-close" onclick={() => showSpeedTestModal = false} disabled={speedTestRunning}>✕</button>
       </header>
@@ -712,13 +750,19 @@
           </div>
           <div class="st-card ping">
             <span class="st-label">Average Latency</span>
-            <span class="st-value ping-text">⚡ {avgPing} ms</span>
+            <span class="st-value ping-text">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              {avgPing} ms
+            </span>
           </div>
         </div>
 
         <!-- MULTI-DNS LATENCY GRID -->
         <div class="dns-section">
-          <h3>🌐 Multi-DNS Server Latency Ping</h3>
+          <h3>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            Multi-DNS Server Latency Ping
+          </h3>
           <div class="dns-grid">
             {#each dnsPings as ping}
               <div class="dns-card" class:online={ping.latency_ms > 0 && ping.latency_ms < 999}>
@@ -738,7 +782,13 @@
       <footer class="modal-footer">
         <span class="status-msg">{speedTestMsg}</span>
         <button class="action-btn run-test-btn" onclick={startSpeedTest} disabled={speedTestRunning}>
-          {speedTestRunning ? '⏳ Testing Connection...' : (speedTestStage === 'complete' ? '🔄 Retest Speed' : '▶ Run Speed Test')}
+          {#if speedTestRunning}
+            <svg class="spin-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Testing Connection...
+          {:else if speedTestStage === 'complete'}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Retest Speed
+          {:else}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Run Speed Test
+          {/if}
         </button>
       </footer>
     </div>
@@ -883,6 +933,14 @@
     font-weight: 700;
     margin: 0;
     color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .title-icon {
+    color: var(--accent-emerald);
+    flex-shrink: 0;
   }
 
   .title-group p {
@@ -905,7 +963,35 @@
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     transition: background 0.2s, border 0.2s, color 0.2s;
+  }
+
+  .live-dot-icon {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    background-color: var(--accent-emerald);
+    border-radius: 50%;
+    box-shadow: 0 0 6px var(--accent-emerald);
+    margin-right: 4px;
+    flex-shrink: 0;
+  }
+
+  .period-bar button.active .live-dot-icon {
+    background-color: #ffffff;
+    box-shadow: 0 0 6px #ffffff;
+  }
+
+  .spin-icon {
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
 
   .action-btn:hover {
@@ -994,6 +1080,9 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
   }
 
   .down-text { color: var(--accent-emerald); }

@@ -425,7 +425,7 @@
       </div>
       {#if $settings.showPing}
         <div class="ping-pill" title="Network Latency">
-          <span class="ping-icon">🌐</span>
+          <span class="ping-icon"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h.01"/><path d="M2 8.82a15 15 0 0 1 20 0"/><path d="M5 12.85a10 10 0 0 1 14 0"/><path d="M8.5 16.88a5 5 0 0 1 7 0"/></svg></span>
           <span class="ping-val">{pingMs > 0 ? `${pingMs}ms` : '--'}</span>
         </div>
       {/if}
@@ -564,7 +564,7 @@
       </div>
       {#if $settings.showPing}
         <div class="ping-pill" title="Network Latency">
-          <span class="ping-icon">🌐</span>
+          <span class="ping-icon"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h.01"/><path d="M2 8.82a15 15 0 0 1 20 0"/><path d="M5 12.85a10 10 0 0 1 14 0"/><path d="M8.5 16.88a5 5 0 0 1 7 0"/></svg></span>
           <span class="ping-val">{pingMs > 0 ? `${pingMs}ms` : '--'}</span>
         </div>
       {/if}

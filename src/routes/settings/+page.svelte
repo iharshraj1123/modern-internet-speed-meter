@@ -228,7 +228,7 @@
         class:active={activeTab === 'support'} 
         onclick={() => activeTab = 'support'}
       >
-        ❤️ Support Us
+        Support Us
       </button>
     </nav>
 
@@ -295,14 +295,14 @@
               class:active={appearanceSubTab === 'theme'}
               onclick={() => appearanceSubTab = 'theme'}
             >
-              🎨 Theme & Interface
+              Theme & Interface
             </button>
             <button 
               class="sub-tab-btn" 
               class:active={appearanceSubTab === 'graph'}
               onclick={() => appearanceSubTab = 'graph'}
             >
-              📊 Widget & Graphs
+              Widget & Graphs
             </button>
           </div>
 
@@ -737,8 +737,8 @@
 
           <div class="app-version-info">
             <span class="version-label">Internet Speed Meter</span>
-            <span class="version-number">Version 1.1.0</span>
-            <span class="version-copy">Made with ❤️ for everyone</span>
+            <span class="version-number">Version 1.2.0</span>
+            <span class="version-copy">Made with care for everyone</span>
           </div>
         </section>
       {/if}
