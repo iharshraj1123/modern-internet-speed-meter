@@ -83,14 +83,18 @@
 
   let avgLiveDown = $derived.by(() => {
     if (!liveHistory.download || liveHistory.download.length === 0) return 0;
-    const sum = liveHistory.download.reduce((acc, v) => acc + v, 0);
-    return sum / liveHistory.download.length;
+    const active = liveHistory.download.filter(v => v > 0);
+    if (active.length === 0) return 0;
+    const sum = active.reduce((acc, v) => acc + v, 0);
+    return sum / active.length;
   });
 
   let avgLiveUp = $derived.by(() => {
     if (!liveHistory.upload || liveHistory.upload.length === 0) return 0;
-    const sum = liveHistory.upload.reduce((acc, v) => acc + v, 0);
-    return sum / liveHistory.upload.length;
+    const active = liveHistory.upload.filter(v => v > 0);
+    if (active.length === 0) return 0;
+    const sum = active.reduce((acc, v) => acc + v, 0);
+    return sum / active.length;
   });
 
   let liveDownPath = $derived(getSvgPath(liveHistory.download, 120, scaleLiveMax));
