@@ -4,6 +4,17 @@ use std::net::TcpStream;
 use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
 use chrono::Local;
+use once_cell::sync::Lazy;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
+use windows::core::GUID;
+use windows::Win32::System::Diagnostics::Etw::{
+    ControlTraceW, EnableTraceEx2, OpenTraceW, ProcessTrace, StartTraceW, CloseTrace,
+    CONTROLTRACE_HANDLE,
+    EVENT_CONTROL_CODE_ENABLE_PROVIDER, EVENT_RECORD, EVENT_TRACE_CONTROL_STOP,
+    EVENT_TRACE_LOGFILEW, EVENT_TRACE_PROPERTIES, EVENT_TRACE_REAL_TIME_MODE,
+    PROCESS_TRACE_MODE_EVENT_RECORD, PROCESS_TRACE_MODE_REAL_TIME,
+};
 
 use windows::Win32::Foundation::{CloseHandle, BOOLEAN};
 use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
@@ -149,6 +160,136 @@ pub fn restart_as_admin() -> Result<(), String> {
             Err("UAC elevation prompt was cancelled or failed".to_string())
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// ETW Real-Time Kernel Tracer Module
+// ---------------------------------------------------------------------------
+
+#[derive(Default, Clone, Copy)]
+pub struct EtwPidMetrics {
+    pub rx_bytes: u64,
+    pub tx_bytes: u64,
+}
+
+static ETW_PID_STATS: Lazy<Mutex<HashMap<u32, EtwPidMetrics>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+static ETW_ACTIVE: AtomicBool = AtomicBool::new(false);
+static ETW_SETTING_ENABLED: AtomicBool = AtomicBool::new(false);
+
+const KERNEL_NETWORK_PROVIDER_GUID: GUID = GUID::from_u128(0x7dd42a49_5329_4832_8dfd_43d979153a88);
+
+pub fn set_etw_enabled(enabled: bool) {
+    ETW_SETTING_ENABLED.store(enabled, Ordering::Relaxed);
+}
+
+pub fn is_etw_enabled() -> bool {
+    ETW_SETTING_ENABLED.load(Ordering::Relaxed)
+}
+
+pub fn ensure_etw_tracer_running() {
+    if ETW_ACTIVE.load(Ordering::Relaxed) || !is_elevated() {
+        return;
+    }
+    ETW_ACTIVE.store(true, Ordering::Relaxed);
+
+    std::thread::spawn(|| {
+        run_etw_session();
+    });
+}
+
+fn run_etw_session() {
+    unsafe {
+        let session_name = "InternetSpeedMeterEtwSession\0";
+        let session_name_w: Vec<u16> = session_name.encode_utf16().collect();
+        
+        let props_size = std::mem::size_of::<EVENT_TRACE_PROPERTIES>() + (session_name_w.len() * 2) + 256;
+        let mut buffer = vec![0u8; props_size];
+        let props = buffer.as_mut_ptr() as *mut EVENT_TRACE_PROPERTIES;
+        
+        (*props).Wnode.BufferSize = props_size as u32;
+        (*props).Wnode.Flags = 0x00020000;
+        (*props).LoggerNameOffset = std::mem::size_of::<EVENT_TRACE_PROPERTIES>() as u32;
+        (*props).LogFileMode = EVENT_TRACE_REAL_TIME_MODE;
+        
+        let mut handle_out = CONTROLTRACE_HANDLE::default();
+        let _ = ControlTraceW(CONTROLTRACE_HANDLE::default(), windows::core::PCWSTR(session_name_w.as_ptr()), props, EVENT_TRACE_CONTROL_STOP);
+        
+        let status = StartTraceW(&mut handle_out, windows::core::PCWSTR(session_name_w.as_ptr()), props);
+        if status.is_err() && status.0 as u32 != 183 {
+            ETW_ACTIVE.store(false, Ordering::Relaxed);
+            return;
+        }
+
+        let _ = EnableTraceEx2(
+            handle_out,
+            &KERNEL_NETWORK_PROVIDER_GUID,
+            EVENT_CONTROL_CODE_ENABLE_PROVIDER.0,
+            5,
+            0,
+            0,
+            0,
+            None,
+        );
+
+        let mut logfile = EVENT_TRACE_LOGFILEW::default();
+        logfile.LoggerName = windows::core::PWSTR(session_name_w.as_ptr() as *mut _);
+        logfile.Anonymous1.ProcessTraceMode = PROCESS_TRACE_MODE_REAL_TIME | PROCESS_TRACE_MODE_EVENT_RECORD;
+        logfile.Anonymous2.EventRecordCallback = Some(etw_event_callback);
+
+        let trace_handle = OpenTraceW(&mut logfile);
+        if trace_handle.Value != 0 && trace_handle.Value != u64::MAX {
+            let handles = [trace_handle];
+            let _ = ProcessTrace(&handles, None, None);
+            let _ = CloseTrace(trace_handle);
+        }
+        
+        ETW_ACTIVE.store(false, Ordering::Relaxed);
+    }
+}
+
+unsafe extern "system" fn etw_event_callback(event_record: *mut EVENT_RECORD) {
+    if event_record.is_null() {
+        return;
+    }
+    let record = &*event_record;
+    let pid = record.EventHeader.ProcessId;
+    if pid == 0 || pid == 4 {
+        return;
+    }
+
+    let id = record.EventHeader.EventDescriptor.Id;
+    let bytes = record.UserDataLength as u64;
+
+    let is_rx = id == 11 || id == 13 || id == 43;
+    let is_tx = id == 10 || id == 12 || id == 42;
+
+    if (is_rx || is_tx) && bytes > 0 {
+        if let Ok(mut map) = ETW_PID_STATS.lock() {
+            let entry = map.entry(pid).or_default();
+            if is_rx {
+                entry.rx_bytes = entry.rx_bytes.saturating_add(bytes);
+            } else {
+                entry.tx_bytes = entry.tx_bytes.saturating_add(bytes);
+            }
+        }
+    }
+}
+
+pub fn drain_etw_deltas() -> (HashMap<u32, u64>, HashMap<u32, u64>) {
+    let mut rx_map = HashMap::new();
+    let mut tx_map = HashMap::new();
+
+    if let Ok(mut map) = ETW_PID_STATS.lock() {
+        for (pid, metrics) in map.drain() {
+            if metrics.rx_bytes > 0 {
+                rx_map.insert(pid, metrics.rx_bytes);
+            }
+            if metrics.tx_bytes > 0 {
+                tx_map.insert(pid, metrics.tx_bytes);
+            }
+        }
+    }
+    (rx_map, tx_map)
 }
 
 /// Return the executable filename of the current foreground window's process.
@@ -524,56 +665,48 @@ impl TelemetryService {
                     continue;
                 }
 
-            // ── 2. Per-process TCP attribution ───────────────────────────
-            //
-            // snapshot_tcp_connections uses unsafe Windows APIs. We wrap it in
-            // catch_unwind so that any access violation or panic in the unsafe
-            // block cannot kill the telemetry thread — NIC speed always flows.
-            let current_tcp_snapshots = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                snapshot_tcp_connections(&mut estats_enabled)
-            })).unwrap_or_else(|_| {
-                // If the TCP snapshot panicked, reset tracking state so the next
-                // tick starts fresh rather than using stale/corrupt data.
-                estats_enabled.clear();
-                last_tcp_snapshots.clear();
-                HashMap::new()
-            });
+            // ── 2. Per-process network attribution ──────────────────────
+            // If ETW kernel tracing is toggled ON and app is elevated as Admin,
+            // consume real-time kernel network events (TCP + UDP payload bytes).
+            // Otherwise, fallback to standard TCP EStats snapshotting.
+            let use_etw_kernel = is_etw_enabled() && is_elevated();
 
-                let mut pid_rx_delta: HashMap<u32, u64> = HashMap::new();
-                let mut pid_tx_delta: HashMap<u32, u64> = HashMap::new();
-                let mut total_tcp_rx: u64 = 0;
-                let mut total_tcp_tx: u64 = 0;
+            let (pid_rx_delta, pid_tx_delta) = if use_etw_kernel {
+                ensure_etw_tracer_running();
+                drain_etw_deltas()
+            } else {
+                let current_tcp_snapshots = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    snapshot_tcp_connections(&mut estats_enabled)
+                })).unwrap_or_else(|_| {
+                    estats_enabled.clear();
+                    last_tcp_snapshots.clear();
+                    HashMap::new()
+                });
+
+                let mut rx_map: HashMap<u32, u64> = HashMap::new();
+                let mut tx_map: HashMap<u32, u64> = HashMap::new();
 
                 for (key, snap) in &current_tcp_snapshots {
                     if let Some(prev) = last_tcp_snapshots.get(key) {
-                        // Saturating subtraction handles counter wraps / key reuse.
-                        let rd = snap.bytes_in.saturating_sub(prev.bytes_in);
-                        let td = snap.bytes_out.saturating_sub(prev.bytes_out);
-
-                        // Guard: if EStats collection wasn't armed (SetPerTcpConnectionEStats
-                        // failed for a privileged process), GetPerTcpConnectionEStats may
-                        // still return ERROR_SUCCESS with garbage in DataBytesIn/Out (e.g.
-                        // 0xFFFFFFFFFFFFFFFF). Cap each per-connection delta at the same
-                        // ceiling used for NIC spikes — no real connection can exceed 1.5 GB/s.
-                        let rd = rd.min(MAX_REALISTIC_BPS);
-                        let td = td.min(MAX_REALISTIC_BPS);
+                        let rd = snap.bytes_in.saturating_sub(prev.bytes_in).min(MAX_REALISTIC_BPS);
+                        let td = snap.bytes_out.saturating_sub(prev.bytes_out).min(MAX_REALISTIC_BPS);
 
                         if rd > 0 {
-                            *pid_rx_delta.entry(snap.pid).or_insert(0) =
-                                pid_rx_delta.get(&snap.pid).copied().unwrap_or(0).saturating_add(rd);
-                            total_tcp_rx = total_tcp_rx.saturating_add(rd);
+                            *rx_map.entry(snap.pid).or_insert(0) =
+                                rx_map.get(&snap.pid).copied().unwrap_or(0).saturating_add(rd);
                         }
                         if td > 0 {
-                            *pid_tx_delta.entry(snap.pid).or_insert(0) =
-                                pid_tx_delta.get(&snap.pid).copied().unwrap_or(0).saturating_add(td);
-                            total_tcp_tx = total_tcp_tx.saturating_add(td);
+                            *tx_map.entry(snap.pid).or_insert(0) =
+                                tx_map.get(&snap.pid).copied().unwrap_or(0).saturating_add(td);
                         }
                     }
-                    // New connections (not in last_tcp_snapshots) produce no delta
-                    // this tick — they will contribute from the next tick onward.
                 }
-
                 last_tcp_snapshots = current_tcp_snapshots;
+                (rx_map, tx_map)
+            };
+
+            let total_tcp_rx: u64 = pid_rx_delta.values().sum();
+            let total_tcp_tx: u64 = pid_tx_delta.values().sum();
 
                 // Proportional clamp: scale down TCP deltas if they somehow exceed
                 // the NIC byte delta (can happen with retransmitted segments or

@@ -113,6 +113,7 @@ function createSettingsStore() {
             try {
                 await invoke('set_widget_locked', { locked: settings.locked });
                 await invoke('toggle_click_through', { enabled: settings.clickThrough });
+                await invoke('set_etw_enabled', { enabled: !!settings.useEtwTelemetry });
             } catch (e) {
                 console.error("Backend sync failed", e);
             }
