@@ -355,23 +355,28 @@
   );
 
   // Calculate dynamic smooth peak scaling for graphs to prevent scale popping
-  let smoothMaxDown = $state(1024);
-  let smoothMaxUp = $state(1024);
-  let smoothMaxCombined = $state(1024);
+  let smoothMaxDown = $state(0);
+  let smoothMaxUp = $state(0);
+  let smoothMaxCombined = $state(0);
 
   $effect(() => {
-    const rawDown = Math.max(...activeDownHistory, 1024);
-    const rawUp = Math.max(...activeUpHistory, 1024);
+    const rawDown = Math.max(...activeDownHistory, 0);
+    const rawUp = Math.max(...activeUpHistory, 0);
     const rawComb = Math.max(rawDown, rawUp);
 
-    smoothMaxDown = rawDown >= smoothMaxDown ? rawDown : Math.max(rawDown, smoothMaxDown * 0.95);
-    smoothMaxUp = rawUp >= smoothMaxUp ? rawUp : Math.max(rawUp, smoothMaxUp * 0.95);
-    smoothMaxCombined = rawComb >= smoothMaxCombined ? rawComb : Math.max(rawComb, smoothMaxCombined * 0.95);
+    const nextDown = rawDown >= smoothMaxDown ? rawDown : Math.max(rawDown, smoothMaxDown * 0.95);
+    smoothMaxDown = nextDown < 1 ? 0 : nextDown;
+
+    const nextUp = rawUp >= smoothMaxUp ? rawUp : Math.max(rawUp, smoothMaxUp * 0.95);
+    smoothMaxUp = nextUp < 1 ? 0 : nextUp;
+
+    const nextComb = rawComb >= smoothMaxCombined ? rawComb : Math.max(rawComb, smoothMaxCombined * 0.95);
+    smoothMaxCombined = nextComb < 1 ? 0 : nextComb;
   });
 
-  let scaleMaxDown = $derived(smoothMaxDown * 1.20);
-  let scaleMaxUp = $derived(smoothMaxUp * 1.20);
-  let scaleMaxCombined = $derived(smoothMaxCombined * 1.20);
+  let scaleMaxDown = $derived(smoothMaxDown > 0 ? smoothMaxDown * 1.20 : 1);
+  let scaleMaxUp = $derived(smoothMaxUp > 0 ? smoothMaxUp * 1.20 : 1);
+  let scaleMaxCombined = $derived(smoothMaxCombined > 0 ? smoothMaxCombined * 1.20 : 1);
 
   // Graph paths
   let downPath = $derived(getPathData(activeDownHistory, 12, scaleMaxDown));
