@@ -389,7 +389,7 @@
     <section class="live-chart-section">
       <div class="chart-header">
         <span class="chart-title">Real-time Net Throughput (60s window)</span>
-        <span class="chart-max">Peak Scale: {formatSpeed(smoothLiveMax, $settings.unit)}</span>
+        <span class="chart-max">Peak: {formatSpeed(smoothLiveMax, $settings.unit)}</span>
       </div>
       <div class="chart-body">
         <div class="y-axis-container">

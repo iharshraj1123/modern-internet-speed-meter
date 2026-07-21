@@ -264,6 +264,7 @@
     {#if $settings.graphType === 'separate'}
       <div class="chart-container split">
         <div class="chart-svg-wrapper">
+          <span class="chart-peak-tag">Peak: {formatSpeed(smoothMaxDown, $settings.unit)}</span>
           <div class="widget-y-axis">
             <span class="widget-y-label top">{formatSpeed(scaleMaxDown, $settings.unit)}</span>
             <span class="widget-y-label bottom">0 {$settings?.unit === 'b' ? 'b/s' : 'B/s'}</span>
@@ -275,6 +276,7 @@
           </svg>
         </div>
         <div class="chart-svg-wrapper">
+          <span class="chart-peak-tag">Peak: {formatSpeed(smoothMaxUp, $settings.unit)}</span>
           <div class="widget-y-axis">
             <span class="widget-y-label top">{formatSpeed(scaleMaxUp, $settings.unit)}</span>
             <span class="widget-y-label bottom">0 {$settings?.unit === 'b' ? 'b/s' : 'B/s'}</span>
@@ -291,6 +293,7 @@
     {:else}
       <!-- Combined Graph (Default) -->
       <div class="chart-container combined">
+        <span class="chart-peak-tag">Peak: {formatSpeed(smoothMaxCombined, $settings.unit)}</span>
         <div class="widget-y-axis">
           <span class="widget-y-label top">{formatSpeed(scaleMaxCombined, $settings.unit)}</span>
           <span class="widget-y-label mid">{formatSpeed(scaleMaxCombined / 2, $settings.unit)}</span>
@@ -365,6 +368,7 @@
     <!-- Chart rendering -->
     {#if $settings.graphType === 'combined'}
       <div class="chart-container combined">
+        <span class="chart-peak-tag">Peak: {formatSpeed(smoothMaxCombined, $settings.unit)}</span>
         <div class="widget-y-axis">
           <span class="widget-y-label top">{formatSpeed(scaleMaxCombined, $settings.unit)}</span>
           <span class="widget-y-label mid">{formatSpeed(scaleMaxCombined / 2, $settings.unit)}</span>
@@ -383,6 +387,7 @@
     {:else if $settings.graphType === 'separate'}
       <div class="chart-container split">
         <div class="chart-svg-wrapper">
+          <span class="chart-peak-tag">Peak: {formatSpeed(smoothMaxDown, $settings.unit)}</span>
           <div class="widget-y-axis">
             <span class="widget-y-label top">{formatSpeed(scaleMaxDown, $settings.unit)}</span>
             <span class="widget-y-label bottom">0 {$settings?.unit === 'b' ? 'b/s' : 'B/s'}</span>
@@ -394,6 +399,7 @@
           </svg>
         </div>
         <div class="chart-svg-wrapper">
+          <span class="chart-peak-tag">Peak: {formatSpeed(smoothMaxUp, $settings.unit)}</span>
           <div class="widget-y-axis">
             <span class="widget-y-label top">{formatSpeed(scaleMaxUp, $settings.unit)}</span>
             <span class="widget-y-label bottom">0 {$settings?.unit === 'b' ? 'b/s' : 'B/s'}</span>
@@ -649,11 +655,18 @@
   }
 
   .chart-container.combined {
+    position: relative;
   }
 
   .chart-container.split {
     flex-direction: column;
     justify-content: space-between;
+  }
+
+  .chart-svg-wrapper {
+    position: relative;
+    width: 100%;
+    height: 100%;
   }
 
   .chart-svg {
