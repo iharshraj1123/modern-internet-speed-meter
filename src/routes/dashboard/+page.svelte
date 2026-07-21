@@ -751,6 +751,7 @@
     --btn-border: rgba(15, 23, 42, 0.08);
     --btn-hover: rgba(15, 23, 42, 0.08);
     --table-header: #f1f5f9;
+    --table-header-hover: #e2e8f0;
     --table-border: rgba(15, 23, 42, 0.04);
     --table-row-hover: rgba(15, 23, 42, 0.01);
     --app-title: #1e293b;
@@ -776,6 +777,7 @@
       --btn-border: rgba(255, 255, 255, 0.1);
       --btn-hover: rgba(255, 255, 255, 0.12);
       --table-header: #15171e;
+      --table-header-hover: #1e212b;
       --table-border: rgba(255, 255, 255, 0.06);
       --table-row-hover: rgba(255, 255, 255, 0.02);
       --app-title: #ffffff;
@@ -801,6 +803,7 @@
     --btn-border: rgba(15, 23, 42, 0.08);
     --btn-hover: rgba(15, 23, 42, 0.08);
     --table-header: #f1f5f9;
+    --table-header-hover: #e2e8f0;
     --table-border: rgba(15, 23, 42, 0.04);
     --table-row-hover: rgba(15, 23, 42, 0.01);
     --app-title: #1e293b;
@@ -825,6 +828,7 @@
     --btn-border: rgba(255, 255, 255, 0.1);
     --btn-hover: rgba(255, 255, 255, 0.12);
     --table-header: #15171e;
+    --table-header-hover: #1e212b;
     --table-border: rgba(255, 255, 255, 0.06);
     --table-row-hover: rgba(255, 255, 255, 0.02);
     --app-title: #ffffff;
@@ -1142,6 +1146,7 @@
   .stats-table th {
     position: sticky;
     top: 0;
+    z-index: 10;
     background: var(--table-header);
     color: var(--text-secondary);
     font-weight: 600;
@@ -1156,7 +1161,7 @@
   }
 
   .stats-table th.sortable:hover {
-    background: var(--btn-hover);
+    background: var(--table-header-hover);
     color: var(--text-primary);
   }
 
