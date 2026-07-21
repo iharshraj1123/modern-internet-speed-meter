@@ -68,14 +68,21 @@
   );
 
   // Dynamic SVG path calculations for the live chart (width: 800, height: 120)
-  let maxLiveDownload = $derived(Math.max(...liveHistory.download, 1024));
-  let maxLiveUpload = $derived(Math.max(...liveHistory.upload, 1024));
-  let maxLiveCombined = $derived(Math.max(maxLiveDownload, maxLiveUpload));
+  let smoothLiveMax = $state(1024);
 
-  let liveDownPath = $derived(getSvgPath(liveHistory.download, 120, maxLiveCombined));
-  let liveDownAreaPath = $derived(getSvgAreaPath(liveHistory.download, 120, maxLiveCombined));
-  let liveUpPath = $derived(getSvgPath(liveHistory.upload, 120, maxLiveCombined));
-  let liveUpAreaPath = $derived(getSvgAreaPath(liveHistory.upload, 120, maxLiveCombined));
+  $effect(() => {
+    const rawMax = Math.max(...liveHistory.download, ...liveHistory.upload, 1024);
+    if (rawMax >= smoothLiveMax) {
+      smoothLiveMax = rawMax;
+    } else {
+      smoothLiveMax = Math.max(rawMax, smoothLiveMax * 0.95);
+    }
+  });
+
+  let liveDownPath = $derived(getSvgPath(liveHistory.download, 120, smoothLiveMax));
+  let liveDownAreaPath = $derived(getSvgAreaPath(liveHistory.download, 120, smoothLiveMax));
+  let liveUpPath = $derived(getSvgPath(liveHistory.upload, 120, smoothLiveMax));
+  let liveUpAreaPath = $derived(getSvgAreaPath(liveHistory.upload, 120, smoothLiveMax));
 
   function getSvgPath(history, height, maxVal) {
     if (maxVal === 0) maxVal = 1;
@@ -337,8 +344,8 @@
   <!-- Period Filters -->
   <div class="period-bar">
     <button class:active={period === 'live'} onclick={() => handlePeriodChange('live')}>🟢 Live</button>
-    <button class:active={period === 'hourly'} onclick={() => handlePeriodChange('hourly')}>Last 24 Hrs</button>
     <button class:active={period === 'daily'} onclick={() => handlePeriodChange('daily')}>Today</button>
+    <button class:active={period === 'hourly'} onclick={() => handlePeriodChange('hourly')}>Last 24 Hrs</button>
     <button class:active={period === 'weekly'} onclick={() => handlePeriodChange('weekly')}>Weekly</button>
     <button class:active={period === 'monthly'} onclick={() => handlePeriodChange('monthly')}>Monthly</button>
     <button class:active={period === 'yearly'} onclick={() => handlePeriodChange('yearly')}>Yearly</button>
@@ -380,10 +387,20 @@
     <section class="live-chart-section">
       <div class="chart-header">
         <span class="chart-title">Real-time Net Throughput (60s window)</span>
-        <span class="chart-max">Peak: {formatSpeed(maxLiveCombined, $settings.unit)}</span>
+        <span class="chart-max">Peak Scale: {formatSpeed(smoothLiveMax, $settings.unit)}</span>
       </div>
       <div class="chart-body">
+        <div class="y-axis-container">
+          <span class="y-label top">{formatSpeed(smoothLiveMax, $settings.unit)}</span>
+          <span class="y-label mid">{formatSpeed(smoothLiveMax / 2, $settings.unit)}</span>
+          <span class="y-label bottom">0 {$settings?.unit === 'b' ? 'b/s' : 'B/s'}</span>
+        </div>
         <svg viewBox="0 0 800 120" class="live-chart-svg" preserveAspectRatio="none">
+          <!-- Reference Gridlines -->
+          <line x1="0" y1="2" x2="800" y2="2" stroke="var(--card-border)" stroke-dasharray="4 4" opacity="0.6" vector-effect="non-scaling-stroke" />
+          <line x1="0" y1="60" x2="800" y2="60" stroke="var(--card-border)" stroke-dasharray="4 4" opacity="0.4" vector-effect="non-scaling-stroke" />
+          <line x1="0" y1="118" x2="800" y2="118" stroke="var(--card-border)" opacity="0.6" vector-effect="non-scaling-stroke" />
+
           <!-- Gradients -->
           <defs>
             <linearGradient id="liveDownGrad" x1="0" y1="0" x2="0" y2="1">
@@ -398,11 +415,11 @@
 
           <!-- Download Area & Line -->
           <path d={liveDownAreaPath} fill="url(#liveDownGrad)" />
-          <path d={liveDownPath} fill="none" stroke="var(--accent-emerald)" stroke-width="2" />
+          <path d={liveDownPath} fill="none" stroke="var(--accent-emerald)" stroke-width="2" vector-effect="non-scaling-stroke" />
 
           <!-- Upload Area & Line -->
           <path d={liveUpAreaPath} fill="url(#liveUpGrad)" />
-          <path d={liveUpPath} fill="none" stroke="var(--accent-blue)" stroke-width="1.5" stroke-dasharray="3 3" />
+          <path d={liveUpPath} fill="none" stroke="var(--accent-blue)" stroke-width="1.5" stroke-dasharray="3 3" vector-effect="non-scaling-stroke" />
         </svg>
       </div>
     </section>
@@ -761,9 +778,39 @@
   }
 
   .chart-body {
-    height: 100px;
+    position: relative;
+    height: 110px;
     width: 100%;
     overflow: hidden;
+  }
+
+  .y-axis-container {
+    position: absolute;
+    top: 2px;
+    left: 8px;
+    bottom: 2px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    pointer-events: none;
+    z-index: 5;
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    opacity: 0.75;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .y-label.top {
+    line-height: 1;
+  }
+
+  .y-label.mid {
+    line-height: 1;
+  }
+
+  .y-label.bottom {
+    line-height: 1;
   }
 
   .live-chart-svg {

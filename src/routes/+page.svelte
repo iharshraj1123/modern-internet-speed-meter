@@ -195,21 +195,31 @@
     if (unlistenStats) unlistenStats();
   });
 
-  // Calculate scaling for graphs
-  let maxDownload = $derived(Math.max(...downloadHistory, 1024));
-  let maxUpload = $derived(Math.max(...uploadHistory, 1024));
-  let maxCombined = $derived(Math.max(maxDownload, maxUpload));
+  // Calculate dynamic smooth peak scaling for graphs to prevent scale popping
+  let smoothMaxDown = $state(1024);
+  let smoothMaxUp = $state(1024);
+  let smoothMaxCombined = $state(1024);
+
+  $effect(() => {
+    const rawDown = Math.max(...downloadHistory, 1024);
+    const rawUp = Math.max(...uploadHistory, 1024);
+    const rawComb = Math.max(rawDown, rawUp);
+
+    smoothMaxDown = rawDown >= smoothMaxDown ? rawDown : Math.max(rawDown, smoothMaxDown * 0.95);
+    smoothMaxUp = rawUp >= smoothMaxUp ? rawUp : Math.max(rawUp, smoothMaxUp * 0.95);
+    smoothMaxCombined = rawComb >= smoothMaxCombined ? rawComb : Math.max(rawComb, smoothMaxCombined * 0.95);
+  });
 
   // Graph paths
-  let downPath = $derived(getPathData(downloadHistory, 24, maxDownload));
-  let downAreaPath = $derived(getAreaPathData(downloadHistory, 24, maxDownload));
-  let upPath = $derived(getPathData(uploadHistory, 24, maxUpload));
-  let upAreaPath = $derived(getAreaPathData(uploadHistory, 24, maxUpload));
+  let downPath = $derived(getPathData(downloadHistory, 24, smoothMaxDown));
+  let downAreaPath = $derived(getAreaPathData(downloadHistory, 24, smoothMaxDown));
+  let upPath = $derived(getPathData(uploadHistory, 24, smoothMaxUp));
+  let upAreaPath = $derived(getAreaPathData(uploadHistory, 24, smoothMaxUp));
 
-  let combinedDownAreaPath = $derived(getAreaPathData(downloadHistory, 28, maxCombined));
-  let combinedDownPath = $derived(getPathData(downloadHistory, 28, maxCombined));
-  let combinedUpAreaPath = $derived(getAreaPathData(uploadHistory, 28, maxCombined));
-  let combinedUpPath = $derived(getPathData(uploadHistory, 28, maxCombined));
+  let combinedDownAreaPath = $derived(getAreaPathData(downloadHistory, 28, smoothMaxCombined));
+  let combinedDownPath = $derived(getPathData(downloadHistory, 28, smoothMaxCombined));
+  let combinedUpAreaPath = $derived(getAreaPathData(uploadHistory, 28, smoothMaxCombined));
+  let combinedUpPath = $derived(getPathData(uploadHistory, 28, smoothMaxCombined));
 
   function handleDoubleClick() {
     invoke("open_dashboard");
@@ -249,20 +259,27 @@
     <!-- Chart rendering -->
     {#if $settings.graphType === 'separate'}
       <div class="chart-container split">
-        <svg viewBox="0 0 230 12" class="chart-svg" preserveAspectRatio="none">
-          <path d={downAreaPath} class="chart-area down-area" />
-          <path d={downPath} class="chart-line down-line" />
-        </svg>
-        <svg viewBox="0 0 230 12" class="chart-svg" preserveAspectRatio="none">
-          <path d={upAreaPath} class="chart-area up-area" />
-          <path d={upPath} class="chart-line up-line" />
-        </svg>
+        <div class="chart-svg-wrapper">
+          <span class="chart-peak-tag">{formatSpeed(smoothMaxDown, $settings.unit)}</span>
+          <svg viewBox="0 0 230 12" class="chart-svg" preserveAspectRatio="none">
+            <path d={downAreaPath} class="chart-area down-area" />
+            <path d={downPath} class="chart-line down-line" />
+          </svg>
+        </div>
+        <div class="chart-svg-wrapper">
+          <span class="chart-peak-tag">{formatSpeed(smoothMaxUp, $settings.unit)}</span>
+          <svg viewBox="0 0 230 12" class="chart-svg" preserveAspectRatio="none">
+            <path d={upAreaPath} class="chart-area up-area" />
+            <path d={upPath} class="chart-line up-line" />
+          </svg>
+        </div>
       </div>
     {:else if $settings.graphType === 'hidden'}
       <!-- Hidden graph -->
     {:else}
       <!-- Combined Graph (Default) -->
       <div class="chart-container combined">
+        <span class="chart-peak-tag">{formatSpeed(smoothMaxCombined, $settings.unit)}</span>
         <svg viewBox="0 0 230 28" class="chart-svg" preserveAspectRatio="none">
           <path d={combinedDownAreaPath} class="chart-area down-area" />
           <path d={combinedUpAreaPath} class="chart-area up-area" />
@@ -528,12 +545,34 @@
   }
 
   .chart-container {
+    position: relative;
     width: 100%;
     margin-top: 4px;
     display: flex;
     overflow: hidden;
     flex: 1;
     min-height: 16px;
+  }
+
+  .chart-svg-wrapper {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    flex: 1;
+  }
+
+  .chart-peak-tag {
+    position: absolute;
+    top: 0px;
+    right: 2px;
+    font-size: 7.5px;
+    font-weight: 600;
+    color: var(--text-sec);
+    opacity: 0.55;
+    pointer-events: none;
+    letter-spacing: -0.2px;
+    z-index: 5;
+    font-variant-numeric: tabular-nums;
   }
 
   .chart-container.combined {
@@ -554,7 +593,6 @@
   /* SVG Graphics styles */
   .chart-area {
     stroke-width: 0;
-    transition: d 0.1s ease;
     pointer-events: none;
   }
 
@@ -569,7 +607,6 @@
   .chart-line {
     fill: none;
     stroke-width: 1.5;
-    transition: d 0.1s ease;
     pointer-events: none;
     vector-effect: non-scaling-stroke;
   }
