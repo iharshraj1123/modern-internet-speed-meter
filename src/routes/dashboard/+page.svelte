@@ -539,7 +539,7 @@
 
           <!-- Upload Area & Line -->
           <path d={liveUpAreaPath} fill="url(#liveUpGrad)" />
-          <path d={liveUpPath} fill="none" stroke="var(--accent-blue)" stroke-width="2" vector-effect="non-scaling-stroke" />
+          <path d={liveUpPath} fill="none" stroke="var(--accent-blue)" stroke-width="2" vector-effect="non-scaling-stroke" class="dashed-line" />
         </svg>
       </div>
       <div class="x-axis-container">
@@ -1088,6 +1088,10 @@
     width: 100%;
     height: 100%;
     overflow: visible;
+  }
+
+  :global(.dashed-line) {
+    stroke-dasharray: 2 2 !important;
   }
 
   .x-axis-container {
