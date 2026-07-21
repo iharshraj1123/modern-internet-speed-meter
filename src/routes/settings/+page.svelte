@@ -343,8 +343,10 @@
               value={$settings.graphType} 
               onchange={(e) => updateSetting("graphType", e.target.value)}
             >
-              <option value="combined">Combined Graph (Green overlapping glow)</option>
-              <option value="separate">Separate Graphs (Stacked Upload/Download)</option>
+              <option value="combined">Combined Graph (Dual Upload & Download Overlay)</option>
+              <option value="separate">Separate Graphs (Stacked Upload & Download Boxes)</option>
+              <option value="down_only">Download Only (Single Graph)</option>
+              <option value="up_only">Upload Only (Single Graph)</option>
               <option value="hidden">Hidden (Metrics text only, saves CPU)</option>
             </select>
           </div>

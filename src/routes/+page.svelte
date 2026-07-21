@@ -225,6 +225,11 @@
   let combinedUpAreaPath = $derived(getAreaPathData(uploadHistory, 28, scaleMaxCombined));
   let combinedUpPath = $derived(getPathData(uploadHistory, 28, scaleMaxCombined));
 
+  let singleDownPath = $derived(getPathData(downloadHistory, 28, scaleMaxDown));
+  let singleDownAreaPath = $derived(getAreaPathData(downloadHistory, 28, scaleMaxDown));
+  let singleUpPath = $derived(getPathData(uploadHistory, 28, scaleMaxUp));
+  let singleUpAreaPath = $derived(getAreaPathData(uploadHistory, 28, scaleMaxUp));
+
   function handleDoubleClick() {
     invoke("open_dashboard");
   }
@@ -289,6 +294,38 @@
             <path d={upPath} class="chart-line up-line" class:solid-line={$settings.upGraphStyle === 'solid'} />
           </svg>
         </div>
+      </div>
+    {:else if $settings.graphType === 'down_only'}
+      <div class="chart-container combined">
+        <span class="chart-peak-tag">Peak: {formatSpeed(smoothMaxDown, $settings.unit)}</span>
+        <div class="widget-y-axis">
+          <span class="widget-y-label top">{formatSpeed(scaleMaxDown, $settings.unit)}</span>
+          <span class="widget-y-label mid">{formatSpeed(scaleMaxDown / 2, $settings.unit)}</span>
+          <span class="widget-y-label bottom">0 {$settings?.unit === 'b' ? 'b/s' : 'B/s'}</span>
+        </div>
+        <svg viewBox="0 0 230 28" class="chart-svg" preserveAspectRatio="none">
+          <line x1="0" y1="0" x2="230" y2="0" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.4" vector-effect="non-scaling-stroke" />
+          <line x1="0" y1="14" x2="230" y2="14" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.25" vector-effect="non-scaling-stroke" />
+          <line x1="0" y1="28" x2="230" y2="28" stroke="var(--widget-border)" opacity="0.4" vector-effect="non-scaling-stroke" />
+          <path d={singleDownAreaPath} class="chart-area down-area" />
+          <path d={singleDownPath} class="chart-line down-line" class:solid-line={$settings.downGraphStyle === 'solid'} />
+        </svg>
+      </div>
+    {:else if $settings.graphType === 'up_only'}
+      <div class="chart-container combined">
+        <span class="chart-peak-tag">Peak: {formatSpeed(smoothMaxUp, $settings.unit)}</span>
+        <div class="widget-y-axis">
+          <span class="widget-y-label top">{formatSpeed(scaleMaxUp, $settings.unit)}</span>
+          <span class="widget-y-label mid">{formatSpeed(scaleMaxUp / 2, $settings.unit)}</span>
+          <span class="widget-y-label bottom">0 {$settings?.unit === 'b' ? 'b/s' : 'B/s'}</span>
+        </div>
+        <svg viewBox="0 0 230 28" class="chart-svg" preserveAspectRatio="none">
+          <line x1="0" y1="0" x2="230" y2="0" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.4" vector-effect="non-scaling-stroke" />
+          <line x1="0" y1="14" x2="230" y2="14" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.25" vector-effect="non-scaling-stroke" />
+          <line x1="0" y1="28" x2="230" y2="28" stroke="var(--widget-border)" opacity="0.4" vector-effect="non-scaling-stroke" />
+          <path d={singleUpAreaPath} class="chart-area up-area" />
+          <path d={singleUpPath} class="chart-line up-line" class:solid-line={$settings.upGraphStyle === 'solid'} />
+        </svg>
       </div>
     {:else if $settings.graphType === 'hidden'}
       <!-- Hidden graph -->
@@ -414,6 +451,38 @@
             <path d={upPath} class="chart-line up-line" class:solid-line={$settings.upGraphStyle === 'solid'} />
           </svg>
         </div>
+      </div>
+    {:else if $settings.graphType === 'down_only'}
+      <div class="chart-container combined">
+        <span class="chart-peak-tag">Peak: {formatSpeed(smoothMaxDown, $settings.unit)}</span>
+        <div class="widget-y-axis">
+          <span class="widget-y-label top">{formatSpeed(scaleMaxDown, $settings.unit)}</span>
+          <span class="widget-y-label mid">{formatSpeed(scaleMaxDown / 2, $settings.unit)}</span>
+          <span class="widget-y-label bottom">0 {$settings?.unit === 'b' ? 'b/s' : 'B/s'}</span>
+        </div>
+        <svg viewBox="0 0 230 28" class="chart-svg" preserveAspectRatio="none">
+          <line x1="0" y1="0" x2="230" y2="0" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.4" vector-effect="non-scaling-stroke" />
+          <line x1="0" y1="14" x2="230" y2="14" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.25" vector-effect="non-scaling-stroke" />
+          <line x1="0" y1="28" x2="230" y2="28" stroke="var(--widget-border)" opacity="0.4" vector-effect="non-scaling-stroke" />
+          <path d={singleDownAreaPath} class="chart-area down-area" />
+          <path d={singleDownPath} class="chart-line down-line" class:solid-line={$settings.downGraphStyle === 'solid'} />
+        </svg>
+      </div>
+    {:else if $settings.graphType === 'up_only'}
+      <div class="chart-container combined">
+        <span class="chart-peak-tag">Peak: {formatSpeed(smoothMaxUp, $settings.unit)}</span>
+        <div class="widget-y-axis">
+          <span class="widget-y-label top">{formatSpeed(scaleMaxUp, $settings.unit)}</span>
+          <span class="widget-y-label mid">{formatSpeed(scaleMaxUp / 2, $settings.unit)}</span>
+          <span class="widget-y-label bottom">0 {$settings?.unit === 'b' ? 'b/s' : 'B/s'}</span>
+        </div>
+        <svg viewBox="0 0 230 28" class="chart-svg" preserveAspectRatio="none">
+          <line x1="0" y1="0" x2="230" y2="0" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.4" vector-effect="non-scaling-stroke" />
+          <line x1="0" y1="14" x2="230" y2="14" stroke="var(--widget-border)" stroke-dasharray="3 3" opacity="0.25" vector-effect="non-scaling-stroke" />
+          <line x1="0" y1="28" x2="230" y2="28" stroke="var(--widget-border)" opacity="0.4" vector-effect="non-scaling-stroke" />
+          <path d={singleUpAreaPath} class="chart-area up-area" />
+          <path d={singleUpPath} class="chart-line up-line" class:solid-line={$settings.upGraphStyle === 'solid'} />
+        </svg>
       </div>
     {/if}
 
