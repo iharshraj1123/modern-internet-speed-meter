@@ -46,4 +46,11 @@ features = [
     "Win32_NetworkManagement_Ndis",
 ]
 
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
 
