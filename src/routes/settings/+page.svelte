@@ -679,7 +679,7 @@
 
           <div class="app-version-info">
             <span class="version-label">Internet Speed Meter</span>
-            <span class="version-number">Version 1.0.0</span>
+            <span class="version-number">Version 1.1.0</span>
             <span class="version-copy">Made with ❤️ for everyone</span>
           </div>
         </section>

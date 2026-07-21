@@ -39,3 +39,6 @@ desktop.ini
 vs_buildtools.exe
 w64devkit/
 w64devkit.zip
+
+# Local Netlify folder
+.netlify
