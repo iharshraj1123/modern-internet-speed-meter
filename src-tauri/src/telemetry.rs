@@ -302,17 +302,26 @@ pub fn ensure_etw_tracer_running() {
 
 fn run_etw_session() {
     unsafe {
-        let session_name = format!("InternetSpeedMeterEtwSession_{}\0", std::process::id());
-        let session_name_w: Vec<u16> = session_name.encode_utf16().collect();
+        let session_name_raw = format!("ISM_ETW_{}\0", std::process::id());
+        let session_name_w: Vec<u16> = session_name_raw.encode_utf16().collect();
         
-        let props_size = std::mem::size_of::<EVENT_TRACE_PROPERTIES>() + (session_name_w.len() * 2) + 256;
+        let header_size = std::mem::size_of::<EVENT_TRACE_PROPERTIES>();
+        let name_bytes_len = session_name_w.len() * 2;
+        let props_size = header_size + name_bytes_len + 256;
         let mut buffer = vec![0u8; props_size];
         let props = buffer.as_mut_ptr() as *mut EVENT_TRACE_PROPERTIES;
         
         (*props).Wnode.BufferSize = props_size as u32;
-        (*props).Wnode.Flags = 0x00020000;
-        (*props).LoggerNameOffset = std::mem::size_of::<EVENT_TRACE_PROPERTIES>() as u32;
+        (*props).Wnode.Flags = 0x00020000; // WNODE_FLAG_TRACED_GUID
+        (*props).LoggerNameOffset = header_size as u32;
         (*props).LogFileMode = EVENT_TRACE_REAL_TIME_MODE;
+        
+        // Copy the UTF-16 session name into the buffer immediately following EVENT_TRACE_PROPERTIES struct
+        std::ptr::copy_nonoverlapping(
+            session_name_w.as_ptr() as *const u8,
+            buffer.as_mut_ptr().add(header_size),
+            name_bytes_len,
+        );
         
         let mut handle_out = CONTROLTRACE_HANDLE::default();
         let _ = ControlTraceW(CONTROLTRACE_HANDLE::default(), windows::core::PCWSTR(session_name_w.as_ptr()), props, EVENT_TRACE_CONTROL_STOP);
