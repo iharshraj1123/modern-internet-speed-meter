@@ -215,10 +215,10 @@
   let scaleMaxCombined = $derived(smoothMaxCombined * 1.20);
 
   // Graph paths
-  let downPath = $derived(getPathData(downloadHistory, 24, scaleMaxDown));
-  let downAreaPath = $derived(getAreaPathData(downloadHistory, 24, scaleMaxDown));
-  let upPath = $derived(getPathData(uploadHistory, 24, scaleMaxUp));
-  let upAreaPath = $derived(getAreaPathData(uploadHistory, 24, scaleMaxUp));
+  let downPath = $derived(getPathData(downloadHistory, 12, scaleMaxDown));
+  let downAreaPath = $derived(getAreaPathData(downloadHistory, 12, scaleMaxDown));
+  let upPath = $derived(getPathData(uploadHistory, 12, scaleMaxUp));
+  let upAreaPath = $derived(getAreaPathData(uploadHistory, 12, scaleMaxUp));
 
   let combinedDownAreaPath = $derived(getAreaPathData(downloadHistory, 28, scaleMaxCombined));
   let combinedDownPath = $derived(getPathData(downloadHistory, 28, scaleMaxCombined));
@@ -276,6 +276,7 @@
             <path d={downPath} class="chart-line down-line" class:solid-line={$settings.downGraphStyle === 'solid'} />
           </svg>
         </div>
+        <div class="split-divider"></div>
         <div class="chart-svg-wrapper">
           <span class="chart-peak-tag">Peak: {formatSpeed(smoothMaxUp, $settings.unit)}</span>
           <div class="widget-y-axis">
@@ -400,6 +401,7 @@
             <path d={downPath} class="chart-line down-line" class:solid-line={$settings.downGraphStyle === 'solid'} />
           </svg>
         </div>
+        <div class="split-divider"></div>
         <div class="chart-svg-wrapper">
           <span class="chart-peak-tag">Peak: {formatSpeed(smoothMaxUp, $settings.unit)}</span>
           <div class="widget-y-axis">
@@ -683,12 +685,24 @@
   .chart-container.split {
     flex-direction: column;
     justify-content: space-between;
+    gap: 2px;
+  }
+
+  .split-divider {
+    width: 100%;
+    height: 1px;
+    background: var(--widget-border);
+    opacity: 0.5;
+    flex-shrink: 0;
+    margin: 1px 0;
   }
 
   .chart-svg-wrapper {
     position: relative;
     width: 100%;
     height: 100%;
+    flex: 1;
+    min-height: 0;
   }
 
   .chart-svg {
