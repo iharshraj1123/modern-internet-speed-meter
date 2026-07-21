@@ -508,6 +508,8 @@
     box-sizing: border-box;
     width: 100%;
     height: 100%;
+    container-type: size;
+    container-name: widget;
     background: var(--widget-bg);
     border: 1px solid var(--widget-border);
     border-radius: 12px;
@@ -519,6 +521,20 @@
     justify-content: space-between;
     box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2);
     transition: background 0.3s, border 0.3s, box-shadow 0.3s;
+  }
+
+  /* Hide mid Y-axis speed label when widget height is <= 52px to prevent label clutter */
+  @container widget (max-height: 52px) {
+    .widget-y-label.mid {
+      display: none !important;
+    }
+  }
+
+  /* Hide right Peak tag when widget width is <= 150px to prevent horizontal overlap */
+  @container widget (max-width: 150px) {
+    .chart-peak-tag {
+      display: none !important;
+    }
   }
 
   .widget:hover {
