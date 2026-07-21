@@ -523,8 +523,8 @@
     transition: background 0.3s, border 0.3s, box-shadow 0.3s;
   }
 
-  /* Hide mid Y-axis speed label when widget height is <= 52px to prevent label clutter */
-  @container widget (max-height: 52px) {
+  /* Hide mid Y-axis speed label when widget height is <= 80px to prevent label clutter */
+  @container widget (max-height: 80px) {
     .widget-y-label.mid {
       display: none !important;
     }
