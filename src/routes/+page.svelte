@@ -369,13 +369,13 @@
     onmousedown={startDrag}
   >
     <div class="metrics">
-      <div class="metric down">
-        <span class="arrow">↓</span>
-        <span class="value">{formatSpeed(downloadSpeed, $settings.unit)}</span>
-      </div>
       <div class="metric up">
         <span class="arrow">↑</span>
         <span class="value">{formatSpeed(uploadSpeed, $settings.unit)}</span>
+      </div>
+      <div class="metric down">
+        <span class="arrow">↓</span>
+        <span class="value">{formatSpeed(downloadSpeed, $settings.unit)}</span>
       </div>
       {#if $settings.showPing}
         <div class="ping-pill" title="Network Latency">
@@ -508,13 +508,13 @@
     ondblclick={handleDoubleClick}
   >
     <div class="metrics">
-      <div class="metric down">
-        <span class="arrow">↓</span>
-        <span class="value">{formatSpeed(downloadSpeed, $settings.unit)}</span>
-      </div>
       <div class="metric up">
         <span class="arrow">↑</span>
         <span class="value">{formatSpeed(uploadSpeed, $settings.unit)}</span>
+      </div>
+      <div class="metric down">
+        <span class="arrow">↓</span>
+        <span class="value">{formatSpeed(downloadSpeed, $settings.unit)}</span>
       </div>
       {#if $settings.showPing}
         <div class="ping-pill" title="Network Latency">

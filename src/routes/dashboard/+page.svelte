@@ -382,26 +382,26 @@
   <!-- Summary Cards -->
   <section class="summary-cards">
     {#if period === 'live'}
-      <div class="card down-card">
-        <span class="card-label">Live Download Speed</span>
-        <span class="card-val down-text">↓ {formatSpeed(liveDownloadSpeed, $settings.unit)}</span>
-      </div>
       <div class="card up-card">
         <span class="card-label">Live Upload Speed</span>
         <span class="card-val up-text">↑ {formatSpeed(liveUploadSpeed, $settings.unit)}</span>
+      </div>
+      <div class="card down-card">
+        <span class="card-label">Live Download Speed</span>
+        <span class="card-val down-text">↓ {formatSpeed(liveDownloadSpeed, $settings.unit)}</span>
       </div>
       <div class="card time-card">
         <span class="card-label">Active Focus Application</span>
         <span class="card-val app-focus-text">🖥️ {liveActiveApp}</span>
       </div>
     {:else}
-      <div class="card down-card">
-        <span class="card-label">Total Downloaded</span>
-        <span class="card-val down-text">↓ {formatVolume(totalDownload)}</span>
-      </div>
       <div class="card up-card">
         <span class="card-label">Total Uploaded</span>
         <span class="card-val up-text">↑ {formatVolume(totalUpload)}</span>
+      </div>
+      <div class="card down-card">
+        <span class="card-label">Total Downloaded</span>
+        <span class="card-val down-text">↓ {formatVolume(totalDownload)}</span>
       </div>
       <div class="card time-card">
         <span class="card-label">Total Screen Time</span>
@@ -416,10 +416,10 @@
       <div class="chart-header">
         <span class="chart-title">Real-time Net Throughput (60s window)</span>
         <div class="chart-stats-badges">
-          <span class="chart-stat-pill down" title="Average Download Speed">Avg ↓: {formatSpeed(avgLiveDown, $settings.unit)}</span>
           <span class="chart-stat-pill up" title="Average Upload Speed">Avg ↑: {formatSpeed(avgLiveUp, $settings.unit)}</span>
-          <span class="chart-stat-pill down-peak" title="Peak Download Speed">Peak ↓: {formatSpeed(peakLiveDown, $settings.unit)}</span>
+          <span class="chart-stat-pill down" title="Average Download Speed">Avg ↓: {formatSpeed(avgLiveDown, $settings.unit)}</span>
           <span class="chart-stat-pill up-peak" title="Peak Upload Speed">Peak ↑: {formatSpeed(peakLiveUp, $settings.unit)}</span>
+          <span class="chart-stat-pill down-peak" title="Peak Download Speed">Peak ↓: {formatSpeed(peakLiveDown, $settings.unit)}</span>
         </div>
       </div>
       <div class="chart-body">
@@ -497,18 +497,18 @@
                   Application {sortField === 'name' ? (sortAscending ? '▲' : '▼') : ''}
                 </th>
                 {#if period === 'live'}
-                  <th onclick={() => toggleSort('live_down')} class="sortable">
-                    Live Down Speed {sortField === 'live_down' ? (sortAscending ? '▲' : '▼') : ''}
-                  </th>
                   <th onclick={() => toggleSort('live_up')} class="sortable">
                     Live Up Speed {sortField === 'live_up' ? (sortAscending ? '▲' : '▼') : ''}
                   </th>
+                  <th onclick={() => toggleSort('live_down')} class="sortable">
+                    Live Down Speed {sortField === 'live_down' ? (sortAscending ? '▲' : '▼') : ''}
+                  </th>
                 {/if}
-                <th onclick={() => toggleSort('download')} class="sortable">
-                  {period === 'live' ? 'Session Download' : 'Downloaded'} {sortField === 'download' ? (sortAscending ? '▲' : '▼') : ''}
-                </th>
                 <th onclick={() => toggleSort('upload')} class="sortable">
                   {period === 'live' ? 'Session Upload' : 'Uploaded'} {sortField === 'upload' ? (sortAscending ? '▲' : '▼') : ''}
+                </th>
+                <th onclick={() => toggleSort('download')} class="sortable">
+                  {period === 'live' ? 'Session Download' : 'Downloaded'} {sortField === 'download' ? (sortAscending ? '▲' : '▼') : ''}
                 </th>
                 <th onclick={() => toggleSort('time')} class="sortable">
                   Active Session Time {sortField === 'time' ? (sortAscending ? '▲' : '▼') : ''}
@@ -528,11 +528,11 @@
                     <span class="app-title">{item.process_name || 'System'}</span>
                   </td>
                   {#if period === 'live'}
-                    <td class="down-val">{formatSpeed(item.current_download_speed, $settings.unit)}</td>
                     <td class="up-val">{formatSpeed(item.current_upload_speed, $settings.unit)}</td>
+                    <td class="down-val">{formatSpeed(item.current_download_speed, $settings.unit)}</td>
                   {/if}
-                  <td class="down-val">{formatVolume(item.bytes_downloaded)}</td>
                   <td class="up-val">{formatVolume(item.bytes_uploaded)}</td>
+                  <td class="down-val">{formatVolume(item.bytes_downloaded)}</td>
                   <td class="time-val">{formatDuration(item.screen_time_seconds)}</td>
                   <td class="share-cell">
                     <div class="progress-wrapper">
