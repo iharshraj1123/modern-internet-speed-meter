@@ -910,6 +910,13 @@ fn snapshot_tcp_connections(
         );
 
         for entry in rows {
+            // Filter out loopback / localhost connections (127.0.0.0/8) and listening sockets (0.0.0.0)
+            let is_local_loopback = (entry.dwLocalAddr & 0xFF) == 127 || entry.dwLocalAddr == 0;
+            let is_remote_loopback = (entry.dwRemoteAddr & 0xFF) == 127 || entry.dwRemoteAddr == 0;
+            if is_local_loopback || is_remote_loopback {
+                continue;
+            }
+
             let key = TcpConnKey {
                 local_addr: entry.dwLocalAddr,
                 local_port: entry.dwLocalPort,
