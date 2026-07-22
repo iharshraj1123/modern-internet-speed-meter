@@ -26,6 +26,8 @@ const DEFAULT_SETTINGS = {
     showWidgetPeak: true,
     filterWidgetNoise: true,
     useEtwTelemetry: false,
+    filterNisTraffic: false, // Legacy fallback flag
+    attributionMode: 'proportional', // Options: 'proportional' (Default), 'exact', 'system_row'
     telemetryEngine: 'io' // Options: 'io' (Default), 'estats', 'etw'
 };
 
@@ -116,6 +118,8 @@ function createSettingsStore() {
                 await invoke('toggle_click_through', { enabled: settings.clickThrough });
                 const engine = settings.telemetryEngine || (settings.useEtwTelemetry ? 'etw' : 'estats');
                 await invoke('set_telemetry_engine', { engine });
+                await invoke('set_attribution_mode', { mode: settings.attributionMode || 'proportional' });
+                await invoke('set_filter_nis_traffic', { enabled: settings.attributionMode === 'system_row' || (settings.filterNisTraffic ?? false) });
             } catch (e) {
                 console.error("Backend sync failed", e);
             }

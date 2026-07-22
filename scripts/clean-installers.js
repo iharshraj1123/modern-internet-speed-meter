@@ -2,20 +2,38 @@ const fs = require('fs');
 const path = require('path');
 
 const buildDir = path.join(__dirname, '..', 'build');
-const downloadsDir = path.join(buildDir, 'downloads');
-const msiFile = path.join(buildDir, 'setup.msi');
 
-console.log('Cleaning installers from static build output...');
+console.log('Cleaning installers and executable artifacts from static build output...');
+
+function cleanDirectory(dirPath) {
+  if (!fs.existsSync(dirPath)) return;
+
+  const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const fullPath = path.join(dirPath, entry.name);
+
+    if (entry.isDirectory()) {
+      if (entry.name.toLowerCase() === 'downloads') {
+        fs.rmSync(fullPath, { recursive: true, force: true });
+        console.log(`Removed directory: ${entry.name}`);
+      } else {
+        cleanDirectory(fullPath);
+      }
+    } else if (entry.isFile()) {
+      const ext = path.extname(entry.name).toLowerCase();
+      if (ext === '.msi' || ext === '.exe' || ext === '.zip' || ext === '.nsis') {
+        fs.unlinkSync(fullPath);
+        console.log(`Removed installer artifact: ${entry.name}`);
+      }
+    }
+  }
+}
 
 try {
-  if (fs.existsSync(downloadsDir)) {
-    fs.rmSync(downloadsDir, { recursive: true, force: true });
-    console.log('Removed build/downloads directory successfully.');
-  }
-  if (fs.existsSync(msiFile)) {
-    fs.rmSync(msiFile, { force: true });
-    console.log('Removed build/setup.msi successfully.');
-  }
+  cleanDirectory(buildDir);
+  console.log('Build output cleanup completed successfully.');
 } catch (err) {
   console.error('Error cleaning installers:', err);
 }
+

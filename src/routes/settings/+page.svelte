@@ -91,6 +91,38 @@
   let showEtwModal = $state(false);
   let telemetrySubTab = $state('engine'); // 'engine', 'limits'
 
+  let currentEngine = $derived($settings.telemetryEngine || 'io');
+
+  let attributionTitle = $derived(
+    currentEngine === 'etw'
+      ? 'Process Attribution Accounting (Kernel ETW Mode)'
+      : currentEngine === 'estats'
+        ? 'Process Attribution Accounting (TCP EStats Mode)'
+        : 'Process Attribution Accounting (Process I/O Mode)'
+  );
+
+  let exactBadgeLabel = $derived(
+    currentEngine === 'etw'
+      ? 'Task Manager / ETW'
+      : currentEngine === 'estats'
+        ? 'Resource Monitor'
+        : 'Process I/O Raw'
+  );
+
+  let exactDesc = $derived(
+    currentEngine === 'etw'
+      ? 'Reports raw payload bytes per process as captured by ETW kernel tracing without scaling for packet headers or ACKs.'
+      : currentEngine === 'estats'
+        ? 'Reports raw TCP socket payload bytes per process as captured by TCP EStats (matches Windows Resource Monitor).'
+        : 'Reports raw process activity read/write bytes per process as reported by Windows I/O counters.'
+  );
+
+  let proportionalDesc = $derived(
+    currentEngine === 'io'
+      ? 'Scales active process I/O counters proportionally so per-process stats match 100% of physical NIC hardware bandwidth.'
+      : 'Scales active process speeds proportionally up/down so all process totals equal 100% of physical NIC hardware bandwidth. Eliminates "System" rows while staying 100% accurate to your ISP bill.'
+  );
+
   function selectTelemetryEngine(mode) {
     updateSetting("telemetryEngine", mode);
     updateSetting("useEtwTelemetry", mode === "etw");
@@ -605,10 +637,10 @@
         <section class="section">
           <h2>Telemetry Options</h2>
 
-          <div class="subtabs-bar" style="display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
+          <div class="sub-tab-bar">
             <button 
               type="button"
-              class="subtab-btn" 
+              class="sub-tab-btn" 
               class:active={telemetrySubTab === 'engine'} 
               onclick={() => telemetrySubTab = 'engine'}
             >
@@ -616,7 +648,7 @@
             </button>
             <button 
               type="button"
-              class="subtab-btn" 
+              class="sub-tab-btn" 
               class:active={telemetrySubTab === 'limits'} 
               onclick={() => telemetrySubTab = 'limits'}
             >
@@ -640,10 +672,10 @@
                   onclick={() => selectTelemetryEngine('io')}
                 >
                   <div class="engine-card-header">
-                    <strong>1. Process I/O</strong>
+                    <strong>1. Process Activity Mode</strong>
                     <span class="badge default">Standard Default</span>
                   </div>
-                  <p>Measures process I/O counters (`GetProcessIoCounters`). Low overhead, rock-solid accuracy, zero Admin requirement.</p>
+                  <p>Lightweight app activity monitoring. Extremely low CPU usage, reliable, requires no Administrator permission.</p>
                 </button>
 
                 <!-- Option 2: TCP EStats -->
@@ -654,10 +686,10 @@
                   onclick={() => selectTelemetryEngine('estats')}
                 >
                   <div class="engine-card-header">
-                    <strong>2. TCP EStats Engine</strong>
-                    <span class="badge">Experimental</span>
+                    <strong>2. Network Socket Mode</strong>
+                    <span class="badge">Standard User</span>
                   </div>
-                  <p>User-mode TCP payload tracking (`GetPerTcpConnectionEStats`). Accurate for TCP streams, zero Admin requirement.</p>
+                  <p>Direct web socket tracking. High accuracy for web browsing and downloads, requires no Administrator permission.</p>
                 </button>
 
                 <!-- Option 3: Kernel ETW Tracing -->
@@ -668,64 +700,92 @@
                   onclick={() => selectTelemetryEngine('etw')}
                 >
                   <div class="engine-card-header">
-                    <strong>3. Kernel ETW Tracing</strong>
+                    <strong>3. Kernel Driver Mode</strong>
                     <span class="badge admin">Requires Admin</span>
                   </div>
-                  <p>Kernel event tracing (`Microsoft-Windows-Kernel-Network`). 100% exact TCP & UDP packet accounting.</p>
+                  <p>Maximum precision kernel tracking. 100% complete accuracy for all apps, web streams, and video calls.</p>
                   {#if ($settings.telemetryEngine || 'estats') === 'etw'}
                     <div style="margin-top: 6px; font-size: 11px; font-weight: 600;">
                       {#if isElevated}
-                        <span style="color: var(--accent-emerald);">🛡️ Admin Active — ETW Operational</span>
+                        <span style="color: var(--accent-emerald);">🛡️ Admin Active — Kernel Mode Running</span>
                       {:else}
                         <span style="color: var(--accent-yellow);">
                           Requires Admin. 
-                          <span style="text-decoration: underline; cursor: pointer; color: var(--accent-emerald);" onclick={confirmRestartAsAdmin}>Restart now</span>
+                          <span style="text-decoration: underline; cursor: pointer; color: var(--accent-emerald);" onclick={confirmRestartAsAdmin}>Restart as Admin</span>
                         </span>
                       {/if}
                     </div>
                   {/if}
                 </button>
               </div>
-            </div>
 
-            <!-- Detailed Explanation Box -->
-            <div class="engine-explanation-box">
-              <h4>Telemetry Engine Comparison</h4>
-              
-              <div class="explanation-item">
-                <div class="explanation-title">
-                  <span class="dot legacy"></span>
-                  <strong>1. Process Disk & I/O Engine (Legacy - commit 7303ecd)</strong>
-                </div>
-                <p>
-                  Queries Windows <code>GetProcessIoCounters</code> API to inspect I/O transfer bytes across running processes.
-                  <br><strong>Pros:</strong> Ultra-low CPU overhead; runs on any standard user account without UAC prompts.
-                  <br><strong>Cons:</strong> Measures total process disk & pipe I/O. File operations (like video rendering, game installs, or local file copying) get counted as network usage.
-                </p>
-              </div>
+              <div class="attribution-selector-box" style="margin-top: 24px;">
+                <h4 style="font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.8; margin-bottom: 12px;">{attributionTitle}</h4>
+                
+                <div class="engine-cards">
+                  <!-- Option 1: Proportional Allocation (Recommended Default) -->
+                  <button
+                    type="button"
+                    class="engine-card"
+                    class:active={($settings.attributionMode || 'proportional') === 'proportional'}
+                    onclick={() => updateSetting("attributionMode", "proportional")}
+                  >
+                    <div class="engine-card-header">
+                      <div class="engine-card-title">
+                        <strong>Proportional ISP Allocation (Recommended Default)</strong>
+                        <span class="badge etw">100% ISP Match</span>
+                      </div>
+                      <div class="radio-indicator">
+                        <div class="radio-dot"></div>
+                      </div>
+                    </div>
+                    <p class="engine-card-desc">
+                      {proportionalDesc}
+                    </p>
+                  </button>
 
-              <div class="explanation-item">
-                <div class="explanation-title">
-                  <span class="dot standard"></span>
-                  <strong>2. TCP EStats Engine (Standard User Mode — Default)</strong>
-                </div>
-                <p>
-                  Uses Windows IP Helper APIs (<code>GetExtendedTcpTable</code> + <code>GetPerTcpConnectionEStats</code>) to track real TCP payload bytes per socket connection.
-                  <br><strong>Pros:</strong> Zero Administrator/UAC requirement; 100% accurate for all TCP connections (web browsing, file downloads, HTTP streams).
-                  <br><strong>Cons:</strong> Misses connectionless UDP/HTTP3 traffic (e.g. YouTube/Twitch QUIC video streams in Firefox/Chrome/Edge), which fall back into the "System" remainder.
-                </p>
-              </div>
+                  <!-- Option 2: Exact Payload Only -->
+                  <button
+                    type="button"
+                    class="engine-card"
+                    class:active={$settings.attributionMode === 'exact'}
+                    onclick={() => updateSetting("attributionMode", "exact")}
+                  >
+                    <div class="engine-card-header">
+                      <div class="engine-card-title">
+                        <strong>Exact Payload Only</strong>
+                        <span class="badge user">{exactBadgeLabel}</span>
+                      </div>
+                      <div class="radio-indicator">
+                        <div class="radio-dot"></div>
+                      </div>
+                    </div>
+                    <p class="engine-card-desc">
+                      {exactDesc}
+                    </p>
+                  </button>
 
-              <div class="explanation-item">
-                <div class="explanation-title">
-                  <span class="dot admin"></span>
-                  <strong>3. Kernel ETW Tracing Engine (Power User Admin Mode)</strong>
+                  <!-- Option 3: Separate System Overhead Row -->
+                  <button
+                    type="button"
+                    class="engine-card"
+                    class:active={$settings.attributionMode === 'system_row'}
+                    onclick={() => updateSetting("attributionMode", "system_row")}
+                  >
+                    <div class="engine-card-header">
+                      <div class="engine-card-title">
+                        <strong>Separate System Overhead Row</strong>
+                        <span class="badge etw">Explicit Remainder</span>
+                      </div>
+                      <div class="radio-indicator">
+                        <div class="radio-dot"></div>
+                      </div>
+                    </div>
+                    <p class="engine-card-desc">
+                      Reports exact payloads per process, and groups all unallocated network overhead and kernel traffic into a dedicated "System / Unattributed" process row.
+                    </p>
+                  </button>
                 </div>
-                <p>
-                  Hooks directly into the Windows Kernel network event pipeline via Event Tracing for Windows (<code>Microsoft-Windows-Kernel-Network</code> provider).
-                  <br><strong>Pros:</strong> 100% exact TCP and UDP packet attribution directly from the OS kernel. Firefox & Chrome HTTP/3 video streams are credited 100% to the browser, reducing "System" share to ~0%.
-                  <br><strong>Cons:</strong> Requires Administrator privileges on launch (triggers Windows UAC elevation prompt).
-                </p>
               </div>
             </div>
 

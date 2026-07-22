@@ -10,7 +10,7 @@ use std::sync::Mutex;
 use windows::core::GUID;
 use windows::Win32::System::Diagnostics::Etw::{
     ControlTraceW, EnableTraceEx2, OpenTraceW, ProcessTrace, StartTraceW, CloseTrace,
-    CONTROLTRACE_HANDLE,
+    QueryAllTracesW, CONTROLTRACE_HANDLE,
     EVENT_CONTROL_CODE_ENABLE_PROVIDER, EVENT_RECORD, EVENT_TRACE_CONTROL_STOP,
     EVENT_TRACE_LOGFILEW, EVENT_TRACE_PROPERTIES, EVENT_TRACE_REAL_TIME_MODE,
     PROCESS_TRACE_MODE_EVENT_RECORD, PROCESS_TRACE_MODE_REAL_TIME,
@@ -20,7 +20,7 @@ use windows::Win32::System::Diagnostics::ToolHelp::{
 };
 use windows::Win32::System::Threading::{GetProcessIoCounters, IO_COUNTERS};
 
-use windows::Win32::Foundation::{CloseHandle, BOOLEAN};
+use windows::Win32::Foundation::{CloseHandle, BOOLEAN, WIN32_ERROR};
 use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
 use windows::Win32::System::Threading::{OpenProcess, OpenProcessToken, PROCESS_QUERY_LIMITED_INFORMATION};
@@ -216,6 +216,35 @@ static ETW_ACTIVE: AtomicBool = AtomicBool::new(false);
 static TELEMETRY_ENGINE_MODE: AtomicU8 = AtomicU8::new(0); // 0 = io (default), 1 = estats, 2 = etw
 static ETW_EVENT_COUNT: AtomicU64 = AtomicU64::new(0);
 static ETW_BYTE_COUNT: AtomicU64 = AtomicU64::new(0);
+static FILTER_NIS_TRAFFIC: AtomicBool = AtomicBool::new(false);
+static ATTRIBUTION_MODE: AtomicU8 = AtomicU8::new(0); // 0 = proportional (default), 1 = exact, 2 = system_row
+
+pub fn set_attribution_mode(mode: &str) {
+    let val = match mode.to_lowercase().as_str() {
+        "proportional" => 0,
+        "exact" => 1,
+        "system_row" | "system" => 2,
+        _ => 0,
+    };
+    ATTRIBUTION_MODE.store(val, Ordering::Relaxed);
+}
+
+#[allow(dead_code)]
+pub fn get_attribution_mode() -> u8 {
+    ATTRIBUTION_MODE.load(Ordering::Relaxed)
+}
+
+pub fn set_filter_nis_traffic(enabled: bool) {
+    FILTER_NIS_TRAFFIC.store(enabled, Ordering::Relaxed);
+    if enabled {
+        ATTRIBUTION_MODE.store(2, Ordering::Relaxed);
+    }
+}
+
+#[allow(dead_code)]
+pub fn get_filter_nis_traffic() -> bool {
+    FILTER_NIS_TRAFFIC.load(Ordering::Relaxed)
+}
 
 static LAST_DEBUG_INFO: Lazy<Mutex<TelemetryDebugInfo>> = Lazy::new(|| {
     Mutex::new(TelemetryDebugInfo {
@@ -223,6 +252,8 @@ static LAST_DEBUG_INFO: Lazy<Mutex<TelemetryDebugInfo>> = Lazy::new(|| {
         engine_name: "Process I/O".to_string(),
         is_elevated: false,
         etw_active: false,
+        filter_nis_active: false,
+        attribution_mode: 0,
         etw_events_last_sec: 0,
         etw_bytes_last_sec: 0,
         nic_rx_bytes_last_sec: 0,
@@ -247,6 +278,8 @@ pub struct TelemetryDebugInfo {
     pub engine_name: String,
     pub is_elevated: bool,
     pub etw_active: bool,
+    pub filter_nis_active: bool,
+    pub attribution_mode: u8,
     pub etw_events_last_sec: u64,
     pub etw_bytes_last_sec: u64,
     pub nic_rx_bytes_last_sec: u64,
@@ -257,7 +290,7 @@ pub struct TelemetryDebugInfo {
 }
 
 pub fn get_telemetry_debug_info() -> TelemetryDebugInfo {
-    if let Ok(guard) = LAST_DEBUG_INFO.lock() {
+    let mut info = if let Ok(guard) = LAST_DEBUG_INFO.lock() {
         guard.clone()
     } else {
         TelemetryDebugInfo {
@@ -265,6 +298,8 @@ pub fn get_telemetry_debug_info() -> TelemetryDebugInfo {
             engine_name: "Unknown".to_string(),
             is_elevated: is_elevated(),
             etw_active: ETW_ACTIVE.load(Ordering::Relaxed),
+            filter_nis_active: FILTER_NIS_TRAFFIC.load(Ordering::Relaxed),
+            attribution_mode: ATTRIBUTION_MODE.load(Ordering::Relaxed),
             etw_events_last_sec: 0,
             etw_bytes_last_sec: 0,
             nic_rx_bytes_last_sec: 0,
@@ -273,7 +308,10 @@ pub fn get_telemetry_debug_info() -> TelemetryDebugInfo {
             raw_etw_pid_samples: Vec::new(),
             etw_status_log: ETW_STATUS_LOG.lock().map(|s| s.clone()).unwrap_or_default(),
         }
-    }
+    };
+    info.filter_nis_active = FILTER_NIS_TRAFFIC.load(Ordering::Relaxed);
+    info.attribution_mode = ATTRIBUTION_MODE.load(Ordering::Relaxed);
+    info
 }
 
 const KERNEL_NETWORK_PROVIDER_GUID: GUID = GUID::from_u128(0x7dd42a49_5329_4832_8dfd_43d979153a88);
@@ -349,52 +387,162 @@ pub fn ensure_etw_tracer_running() {
     });
 }
 
+/// Fixed session name — NOT PID-based — so ControlTraceW cleanup always
+/// finds the previous session even after a crash / force-kill.
+const ETW_SESSION_NAME: &str = "ISM_KernelTracer";
+const EVENT_TRACE_SYSTEM_LOGGER_MODE: u32 = 0x02000000;
+
+/// Create a fresh EVENT_TRACE_PROPERTIES buffer for StartTraceW.
+/// MUST be called before every StartTraceW because ControlTraceW mutates
+/// the buffer, corrupting fields like BufferSize, LogFileMode, FlushTimer.
+unsafe fn create_etw_props() -> (Vec<u8>, Vec<u16>) {
+    let session_name_raw = format!("{}\0", ETW_SESSION_NAME);
+    let session_name_w: Vec<u16> = session_name_raw.encode_utf16().collect();
+
+    let header_size = std::mem::size_of::<EVENT_TRACE_PROPERTIES>();
+    let name_bytes_len = session_name_w.len() * 2;
+    let props_size = header_size + name_bytes_len + 256;
+    let mut buffer = vec![0u8; props_size];
+    let props = buffer.as_mut_ptr() as *mut EVENT_TRACE_PROPERTIES;
+
+    (*props).Wnode.BufferSize = props_size as u32;
+    (*props).Wnode.Flags = 0x00020000; // WNODE_FLAG_TRACED_GUID
+    (*props).LoggerNameOffset = header_size as u32;
+    (*props).LogFileMode = EVENT_TRACE_REAL_TIME_MODE | EVENT_TRACE_SYSTEM_LOGGER_MODE;
+    (*props).FlushTimer = 1; // Flush ETW real-time buffers every 1 second
+
+    // Copy UTF-16 session name into buffer after the header
+    std::ptr::copy_nonoverlapping(
+        session_name_w.as_ptr() as *const u8,
+        buffer.as_mut_ptr().add(header_size),
+        name_bytes_len,
+    );
+
+    (buffer, session_name_w)
+}
+
+/// Stop a named ETW session using a fresh props buffer.
+unsafe fn stop_named_session(name_w: &[u16]) {
+    let header_size = std::mem::size_of::<EVENT_TRACE_PROPERTIES>();
+    let props_size = header_size + name_w.len() * 2 + 256;
+    let mut buf = vec![0u8; props_size];
+    let props = buf.as_mut_ptr() as *mut EVENT_TRACE_PROPERTIES;
+    (*props).Wnode.BufferSize = props_size as u32;
+    (*props).LoggerNameOffset = header_size as u32;
+    let _ = ControlTraceW(
+        CONTROLTRACE_HANDLE::default(),
+        windows::core::PCWSTR(name_w.as_ptr()),
+        props,
+        EVENT_TRACE_CONTROL_STOP,
+    );
+}
+
+/// Enumerate all active ETW sessions and stop any stale ISM sessions.
+unsafe fn cleanup_stale_ism_sessions() {
+    let max_sessions = 64usize;
+    let header_size = std::mem::size_of::<EVENT_TRACE_PROPERTIES>();
+    let single_buf_size = header_size + 1024;
+    let mut buffers: Vec<Vec<u8>> = (0..max_sessions)
+        .map(|_| vec![0u8; single_buf_size])
+        .collect();
+    let mut ptrs: Vec<*mut EVENT_TRACE_PROPERTIES> = buffers
+        .iter_mut()
+        .map(|buf| {
+            let props = buf.as_mut_ptr() as *mut EVENT_TRACE_PROPERTIES;
+            (*props).Wnode.BufferSize = single_buf_size as u32;
+            (*props).LoggerNameOffset = header_size as u32;
+            props
+        })
+        .collect();
+
+    let mut session_count = 0u32;
+    let result = QueryAllTracesW(&mut ptrs, &mut session_count);
+    if result != WIN32_ERROR(0) {
+        log_etw_status(&format!("QueryAllTracesW failed: {:?}", result));
+        return;
+    }
+
+    for i in 0..session_count as usize {
+        let buf = &buffers[i];
+        let name_offset = (*ptrs[i]).LoggerNameOffset as usize;
+        let name_slice = &buf[name_offset..];
+        let name_u16: Vec<u16> = name_slice
+            .chunks_exact(2)
+            .map(|c| u16::from_ne_bytes([c[0], c[1]]))
+            .take_while(|&c| c != 0)
+            .collect();
+        let session_name = String::from_utf16_lossy(&name_u16);
+
+        // Stop any session starting with "ISM_" — covers both old PID-based
+        // names (ISM_ETW_12345) and the new fixed name (ISM_KernelTracer)
+        if session_name.starts_with("ISM_") {
+            log_etw_status(&format!("Stopping stale session: {}", session_name));
+            let name_w: Vec<u16> = session_name.encode_utf16().chain(std::iter::once(0)).collect();
+            stop_named_session(&name_w);
+        }
+    }
+}
+
 fn run_etw_session() {
     unsafe {
         let p1 = enable_privilege("SeSystemProfilePrivilege");
         let p2 = enable_privilege("SeDebugPrivilege");
         log_etw_status(&format!("Initializing ETW session (Privileges: Profile={}, Debug={})...", p1, p2));
 
-        let session_name_raw = format!("ISM_ETW_{}\0", std::process::id());
-        let session_name_w: Vec<u16> = session_name_raw.encode_utf16().collect();
-        
-        let header_size = std::mem::size_of::<EVENT_TRACE_PROPERTIES>();
-        let name_bytes_len = session_name_w.len() * 2;
-        let props_size = header_size + name_bytes_len + 256;
-        let mut buffer = vec![0u8; props_size];
-        let props = buffer.as_mut_ptr() as *mut EVENT_TRACE_PROPERTIES;
-        
-        const EVENT_TRACE_SYSTEM_LOGGER_MODE: u32 = 0x02000000;
+        // Phase 1: Stop our own named session (handles normal restart)
+        let (_, session_name_w) = create_etw_props();
+        stop_named_session(&session_name_w);
 
-        (*props).Wnode.BufferSize = props_size as u32;
-        (*props).Wnode.Flags = 0x00020000; // WNODE_FLAG_TRACED_GUID
-        (*props).LoggerNameOffset = header_size as u32;
-        (*props).LogFileMode = EVENT_TRACE_REAL_TIME_MODE | EVENT_TRACE_SYSTEM_LOGGER_MODE;
-        (*props).FlushTimer = 1; // Flush ETW real-time buffers every 1 second!
-        
-        // Copy the UTF-16 session name into the buffer immediately following EVENT_TRACE_PROPERTIES struct
-        std::ptr::copy_nonoverlapping(
-            session_name_w.as_ptr() as *const u8,
-            buffer.as_mut_ptr().add(header_size),
-            name_bytes_len,
-        );
-        
+        // Phase 2: Enumerate and kill ALL stale ISM_* sessions (handles crash recovery
+        // where old PID-based sessions like ISM_ETW_12345 are still lingering)
+        cleanup_stale_ism_sessions();
+
+        // Phase 3: StartTraceW with retry loop + backoff
         let mut handle_out = CONTROLTRACE_HANDLE::default();
-        let _ = ControlTraceW(CONTROLTRACE_HANDLE::default(), windows::core::PCWSTR(session_name_w.as_ptr()), props, EVENT_TRACE_CONTROL_STOP);
-        
-        let mut status = StartTraceW(&mut handle_out, windows::core::PCWSTR(session_name_w.as_ptr()), props);
-        if status.is_err() && status.0 as u32 == 183 {
-            let _ = ControlTraceW(CONTROLTRACE_HANDLE::default(), windows::core::PCWSTR(session_name_w.as_ptr()), props, EVENT_TRACE_CONTROL_STOP);
-            status = StartTraceW(&mut handle_out, windows::core::PCWSTR(session_name_w.as_ptr()), props);
+        let mut start_ok = false;
+
+        for attempt in 1..=3 {
+            // CRITICAL: Create a FRESH props buffer every attempt.
+            // ControlTraceW and failed StartTraceW both mutate the buffer!
+            let (mut buffer, name_w) = create_etw_props();
+            let props = buffer.as_mut_ptr() as *mut EVENT_TRACE_PROPERTIES;
+
+            let status = StartTraceW(
+                &mut handle_out,
+                windows::core::PCWSTR(name_w.as_ptr()),
+                props,
+            );
+
+            if status.is_ok() && handle_out.Value != 0 {
+                log_etw_status(&format!("StartTraceW OK! Handle: 0x{:x} (attempt {})", handle_out.Value, attempt));
+                start_ok = true;
+                break;
+            }
+
+            let err_code = status.0 as u32;
+            log_etw_status(&format!(
+                "StartTraceW attempt {}/3 failed: status=WIN32_ERROR({}), handle=0x{:x}",
+                attempt, err_code, handle_out.Value
+            ));
+
+            if err_code == 183 {
+                // ERROR_ALREADY_EXISTS — stop and retry immediately
+                stop_named_session(&name_w);
+            } else if err_code == 1450 {
+                // ERROR_NO_SYSTEM_RESOURCES — stale system logger blocking the slot
+                cleanup_stale_ism_sessions();
+                std::thread::sleep(Duration::from_millis(500));
+            } else {
+                // Other error — wait briefly and retry
+                std::thread::sleep(Duration::from_millis(200));
+            }
         }
 
-        if status.is_err() || handle_out.Value == 0 {
-            log_etw_status(&format!("StartTraceW failed: status={:?}, handle=0x{:x}", status, handle_out.Value));
+        if !start_ok {
+            log_etw_status("StartTraceW failed after 3 attempts — giving up");
             ETW_ACTIVE.store(false, Ordering::Relaxed);
             return;
         }
-
-        log_etw_status(&format!("StartTraceW OK! Handle: 0x{:x}", handle_out.Value));
 
         let enable_res = EnableTraceEx2(
             handle_out,
@@ -413,6 +561,9 @@ fn run_etw_session() {
             log_etw_status("EnableTraceEx2 OK! Attached Kernel Network Provider");
         }
 
+        // Create a fresh name for OpenTraceW / cleanup (don't reuse mutated buffers)
+        let (_, session_name_w) = create_etw_props();
+
         let mut logfile = EVENT_TRACE_LOGFILEW::default();
         logfile.LoggerName = windows::core::PWSTR(session_name_w.as_ptr() as *mut _);
         logfile.Anonymous1.ProcessTraceMode = PROCESS_TRACE_MODE_REAL_TIME | PROCESS_TRACE_MODE_EVENT_RECORD;
@@ -421,7 +572,7 @@ fn run_etw_session() {
         let trace_handle = OpenTraceW(&mut logfile);
         if trace_handle.Value == 0 || trace_handle.Value == u64::MAX {
             log_etw_status(&format!("OpenTraceW failed: handle=0x{:x}", trace_handle.Value));
-            let _ = ControlTraceW(handle_out, windows::core::PCWSTR(session_name_w.as_ptr()), props, EVENT_TRACE_CONTROL_STOP);
+            stop_named_session(&session_name_w);
             ETW_ACTIVE.store(false, Ordering::Relaxed);
             return;
         }
@@ -437,8 +588,8 @@ fn run_etw_session() {
             }
         }
         let _ = CloseTrace(trace_handle);
-        
-        let _ = ControlTraceW(handle_out, windows::core::PCWSTR(session_name_w.as_ptr()), props, EVENT_TRACE_CONTROL_STOP);
+
+        stop_named_session(&session_name_w);
         log_etw_status("ETW Session stopped cleanly");
         ETW_ACTIVE.store(false, Ordering::Relaxed);
     }
@@ -592,7 +743,7 @@ fn get_process_name_for_pid(pid: u32) -> String {
             }
         }
     }
-    "System".to_string()
+    "System / Unattributed".to_string()
 }
 
 /// Return cumulative (rx_bytes, tx_bytes) for the best internet-facing NIC.
@@ -978,18 +1129,45 @@ impl TelemetryService {
             let total_tcp_rx: u64 = pid_rx_delta.values().sum();
             let total_tcp_tx: u64 = pid_tx_delta.values().sum();
 
-                // Proportional clamp: scale down TCP deltas if they somehow exceed
-                // the NIC byte delta (can happen with retransmitted segments or
-                // sub-millisecond timing jitter between the two API calls).
-                let rx_scale = if total_tcp_rx > rx_diff && total_tcp_rx > 0 {
-                    rx_diff as f64 / total_tcp_rx as f64
-                } else {
-                    1.0
+                let attr_mode = ATTRIBUTION_MODE.load(Ordering::Relaxed);
+
+                // Attribution scaling factor:
+                // Mode 0 (Proportional - Default): Scales active process bytes proportionally up/down so all process totals equal 100% of physical NIC hardware bandwidth.
+                // Mode 1 (Exact) & Mode 2 (System Row): Clamp scale down if ETW exceeds NIC, but don't scale up payload bytes.
+                let rx_scale = match attr_mode {
+                    0 => {
+                        if total_tcp_rx > 0 {
+                            rx_diff as f64 / total_tcp_rx as f64
+                        } else {
+                            1.0
+                        }
+                    },
+                    1 | 2 => {
+                        if total_tcp_rx > rx_diff && total_tcp_rx > 0 {
+                            rx_diff as f64 / total_tcp_rx as f64
+                        } else {
+                            1.0
+                        }
+                    },
+                    _ => 1.0,
                 };
-                let tx_scale = if total_tcp_tx > tx_diff && total_tcp_tx > 0 {
-                    tx_diff as f64 / total_tcp_tx as f64
-                } else {
-                    1.0
+
+                let tx_scale = match attr_mode {
+                    0 => {
+                        if total_tcp_tx > 0 {
+                            tx_diff as f64 / total_tcp_tx as f64
+                        } else {
+                            1.0
+                        }
+                    },
+                    1 | 2 => {
+                        if total_tcp_tx > tx_diff && total_tcp_tx > 0 {
+                            tx_diff as f64 / total_tcp_tx as f64
+                        } else {
+                            1.0
+                        }
+                    },
+                    _ => 1.0,
                 };
 
                 let mut process_speeds: Vec<ProcessSpeed> = Vec::new();
@@ -1045,18 +1223,18 @@ impl TelemetryService {
                     });
                 }
 
-                // Remainder: NIC bytes not accounted for by any TCP process.
-                // Covers UDP (DNS, QUIC/HTTP3, streaming, VoIP), ICMP, raw sockets,
-                // and system-privileged TCP connections where EStats collection failed.
+                // Remainder: NIC bytes not accounted for by individual process payloads.
+                // Added ONLY in Mode 2 (System Row) or if FILTER_NIS_TRAFFIC is explicitly set to true.
                 let remainder_rx = rx_diff.saturating_sub(attributed_rx);
                 let remainder_tx = tx_diff.saturating_sub(attributed_tx);
+                let show_system_row = attr_mode == 2 || FILTER_NIS_TRAFFIC.load(Ordering::Relaxed);
 
-                if remainder_rx > 0 || remainder_tx > 0 {
+                if show_system_row && (remainder_rx > 0 || remainder_tx > 0) {
                     let sys_down = (remainder_rx as f64 / secs) as u64;
                     let sys_up   = (remainder_tx as f64 / secs) as u64;
                     if sys_down > 0 || sys_up > 0 {
                         let entry = accumulator
-                            .entry("System".to_string())
+                            .entry("System / Unattributed".to_string())
                             .or_insert(ProcessStatsAccumulator {
                                 bytes_downloaded: 0,
                                 bytes_uploaded: 0,
@@ -1065,7 +1243,7 @@ impl TelemetryService {
                         entry.bytes_downloaded += remainder_rx;
                         entry.bytes_uploaded   += remainder_tx;
                         process_speeds.push(ProcessSpeed {
-                            name: "System".to_string(),
+                            name: "System / Unattributed".to_string(),
                             download_speed: sys_down,
                             upload_speed: sys_up,
                         });

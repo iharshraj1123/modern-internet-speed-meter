@@ -32,12 +32,12 @@
   async function startResize(direction, event) {
     event.preventDefault();
     event.stopPropagation();
-    // Block vertical resizing when graph is hidden
-    if ($settings.graphType === 'hidden' && (direction.includes('South') || direction.includes('North'))) {
-      return;
-    }
     try {
       const appWindow = getCurrentWindow();
+      if ($settings.graphType === 'hidden') {
+        await appWindow.setMinSize(new LogicalSize(100, COLLAPSED_HEIGHT));
+        await appWindow.setMaxSize(null);
+      }
       await appWindow.startResizeDragging(direction);
     } catch (err) {
       console.error("Failed to start native window resize", err);
@@ -221,24 +221,39 @@
     // Sync initial settings to backend
     settings.syncWithBackend($settings);
 
-    // Listen for native window resize events to save custom expanded dimensions or enforce hidden height
+    // Listen for native window resize events to save custom expanded dimensions or auto-collapse/expand graph on vertical drag
+    let isResizingToggle = false;
     try {
       unlistenResize = await getCurrentWindow().onResized(async () => {
-        if ($settings.graphType === 'hidden') {
-          try {
-            const appWindow = getCurrentWindow();
-            const factor = await appWindow.scaleFactor().catch(() => 1);
-            const size = await appWindow.outerSize();
-            const w = Math.round(size.width / factor);
-            const h = Math.round(size.height / factor);
-            if (h !== COLLAPSED_HEIGHT) {
+        if (isResizingToggle) return;
+        try {
+          const appWindow = getCurrentWindow();
+          const factor = await appWindow.scaleFactor().catch(() => 1);
+          const size = await appWindow.outerSize();
+          const w = Math.round(size.width / factor);
+          const h = Math.round(size.height / factor);
+
+          if ($settings.graphType !== 'hidden') {
+            if (h <= 50) {
+              isResizingToggle = true;
+              localStorage.setItem('last_expanded_graph_type', $settings.graphType);
+              settings.update(s => ({ ...s, graphType: 'hidden' }));
+              setTimeout(() => { isResizingToggle = false; }, 300);
+            } else {
+              saveCurrentDimensionsIfExpanded();
+            }
+          } else {
+            if (h > 52) {
+              isResizingToggle = true;
+              const restoredType = localStorage.getItem('last_expanded_graph_type') || 'combined';
+              settings.update(s => ({ ...s, graphType: restoredType }));
+              setTimeout(() => { isResizingToggle = false; }, 300);
+            } else if (h !== COLLAPSED_HEIGHT) {
               await appWindow.setSize(new LogicalSize(w, COLLAPSED_HEIGHT));
             }
-          } catch (e) {
-            console.error("Failed to enforce collapsed height", e);
           }
-        } else {
-          saveCurrentDimensionsIfExpanded();
+        } catch (e) {
+          console.error("Failed handling resize event", e);
         }
       });
     } catch (e) {
@@ -298,7 +313,7 @@
         await appWindow.setMaxSize(new LogicalSize(10000, COLLAPSED_HEIGHT));
       } else if (oldType === 'hidden') {
         // Remove height restrictions when returning to expanded graph mode
-        await appWindow.setMinSize(new LogicalSize(140, 48));
+        await appWindow.setMinSize(new LogicalSize(100, COLLAPSED_HEIGHT));
         await appWindow.setMaxSize(null);
 
         // Revert back from hidden to expanded mode

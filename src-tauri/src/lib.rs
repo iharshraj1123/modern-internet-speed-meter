@@ -52,6 +52,18 @@ fn set_telemetry_engine(engine: String) {
     telemetry::set_telemetry_engine(&engine);
 }
 
+// Tauri command: Set process attribution accounting mode ("proportional", "exact", "system_row")
+#[tauri::command]
+fn set_attribution_mode(mode: String) {
+    telemetry::set_attribution_mode(&mode);
+}
+
+// Tauri command: Toggle NIS/WebView2 traffic filtering
+#[tauri::command]
+fn set_filter_nis_traffic(enabled: bool) {
+    telemetry::set_filter_nis_traffic(enabled);
+}
+
 // Tauri command: Get detailed real-time telemetry debug state for live inspection
 #[tauri::command]
 fn get_telemetry_debug_info() -> telemetry::TelemetryDebugInfo {
@@ -479,6 +491,8 @@ pub fn run() {
             is_process_elevated,
             restart_as_admin,
             set_telemetry_engine,
+            set_attribution_mode,
+            set_filter_nis_traffic,
             get_telemetry_debug_info,
         ])
         .run(tauri::generate_context!())
