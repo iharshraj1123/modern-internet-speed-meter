@@ -86,6 +86,13 @@ async fn get_historical_stats(period: String) -> Result<Vec<db::ProcessStat>, St
     db::get_stats_for_period(&conn, &period).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn get_available_months() -> Result<Vec<String>, String> {
+    let path = DB_PATH.lock().unwrap().clone();
+    let conn = db::open_conn(&path).map_err(|e| e.to_string())?;
+    db::get_available_months(&conn).map_err(|e| e.to_string())
+}
+
 // Tauri command: Toggle widget position lock
 #[tauri::command]
 async fn set_widget_locked(app: AppHandle, locked: bool) -> Result<(), String> {
@@ -494,6 +501,7 @@ pub fn run() {
             set_attribution_mode,
             set_filter_nis_traffic,
             get_telemetry_debug_info,
+            get_available_months,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

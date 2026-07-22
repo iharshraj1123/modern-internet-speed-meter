@@ -25,6 +25,10 @@
   let sortField = $state("total"); // 'name', 'live_down', 'live_up', 'download', 'upload', 'time', 'total', 'share'
   let sortAscending = $state(false);
 
+  // Month sub-tabs state for Yearly view
+  let availableMonths = $state([]);
+  let selectedYearMonth = $state("all"); // 'all' or 'YYYY-MM'
+
   let unlistenStats;
   let unlistenSpeedTest;
 
@@ -286,6 +290,14 @@
     }
   }
 
+  function formatMonthLabel(monthStr) {
+    if (!monthStr) return "";
+    const [year, month] = monthStr.split("-");
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const mIndex = parseInt(month, 10) - 1;
+    return `${monthNames[mIndex] || month} ${year}`;
+  }
+
   async function loadStats() {
     if (period === "live") {
       loading = false;
@@ -294,7 +306,20 @@
     loading = true;
     errorMsg = "";
     try {
-      const res = await invoke("get_historical_stats", { period });
+      if (period === "yearly") {
+        try {
+          const months = await invoke("get_available_months");
+          availableMonths = Array.isArray(months) ? months : [];
+        } catch (e) {
+          console.error("Failed to load available months", e);
+        }
+      }
+
+      const targetPeriod = (period === "yearly" && selectedYearMonth !== "all")
+        ? `month_${selectedYearMonth}`
+        : period;
+
+      const res = await invoke("get_historical_stats", { period: targetPeriod });
       stats = Array.isArray(res) ? res : [];
     } catch (e) {
       console.error("Failed to query stats", e);
@@ -374,6 +399,14 @@
 
   function handlePeriodChange(newPeriod) {
     period = newPeriod;
+    if (newPeriod === 'yearly') {
+      selectedYearMonth = 'all';
+    }
+    loadStats();
+  }
+
+  function handleYearMonthChange(mKey) {
+    selectedYearMonth = mKey;
     loadStats();
   }
 
@@ -471,12 +504,34 @@
   <!-- Period Filters -->
   <div class="period-bar">
     <button class:active={period === 'live'} onclick={() => handlePeriodChange('live')}><span class="live-dot-icon"></span> Live</button>
+    <button class:active={period === 'this_hour'} onclick={() => handlePeriodChange('this_hour')}>This Hour</button>
     <button class:active={period === 'daily'} onclick={() => handlePeriodChange('daily')}>Today</button>
     <button class:active={period === 'hourly'} onclick={() => handlePeriodChange('hourly')}>Last 24 Hrs</button>
     <button class:active={period === 'weekly'} onclick={() => handlePeriodChange('weekly')}>Weekly</button>
     <button class:active={period === 'monthly'} onclick={() => handlePeriodChange('monthly')}>Monthly</button>
     <button class:active={period === 'yearly'} onclick={() => handlePeriodChange('yearly')}>Yearly</button>
   </div>
+
+  {#if period === 'yearly'}
+    <div class="sub-tab-bar">
+      <button 
+        class="sub-tab-btn" 
+        class:active={selectedYearMonth === 'all'} 
+        onclick={() => handleYearMonthChange('all')}
+      >
+        All (Full Year)
+      </button>
+      {#each availableMonths as m}
+        <button 
+          class="sub-tab-btn" 
+          class:active={selectedYearMonth === m} 
+          onclick={() => handleYearMonthChange(m)}
+        >
+          {formatMonthLabel(m)}
+        </button>
+      {/each}
+    </div>
+  {/if}
 
   <!-- Summary Cards -->
   <section class="summary-cards">
@@ -1624,7 +1679,41 @@
   }
 
   .run-test-btn:disabled {
-    opacity: 0.6;
+    opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  /* Sub-tab bar for Yearly view */
+  .sub-tab-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 12px 0 16px 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .sub-tab-btn {
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    color: var(--text-secondary);
+    padding: 5px 12px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .sub-tab-btn:hover {
+    background: var(--btn-bg);
+    color: var(--text-primary);
+  }
+
+  .sub-tab-btn.active {
+    background: var(--accent-emerald);
+    color: #ffffff;
+    border-color: var(--accent-emerald);
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
   }
 </style>

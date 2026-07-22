@@ -139,12 +139,13 @@ pub fn aggregate_data(conn: &Connection) -> Result<()> {
         params![current_hour],
     )?;
 
-    // 2. Roll up hourly stats into daily stats
+    // 2. Roll up hourly stats into daily stats (only for completed past days)
     conn.execute(
         "INSERT INTO daily_stats (date, process_name, bytes_downloaded, bytes_uploaded, screen_time_seconds)
          SELECT strftime('%Y-%m-%d', timestamp, 'unixepoch', 'localtime') AS dt, process_name,
                 SUM(bytes_downloaded), SUM(bytes_uploaded), SUM(screen_time_seconds)
          FROM hourly_stats
+         WHERE timestamp < strftime('%s', 'now', 'start of day', 'localtime')
          GROUP BY dt, process_name
          ON CONFLICT(date, process_name) DO UPDATE SET
             bytes_downloaded = excluded.bytes_downloaded,
@@ -179,6 +180,15 @@ pub struct ProcessStat {
 
 pub fn get_stats_for_period(conn: &Connection, period: &str) -> Result<Vec<ProcessStat>> {
     let query = match period {
+        "this_hour" => {
+            // Stats for the current clock hour from raw 5-minute telemetry
+            "SELECT process_name, COALESCE(SUM(bytes_downloaded), 0), COALESCE(SUM(bytes_uploaded), 0), COALESCE(SUM(screen_time_seconds), 0)
+             FROM process_telemetry
+             WHERE timestamp >= ((strftime('%s', 'now') / 3600) * 3600)
+             GROUP BY process_name
+             HAVING COALESCE(SUM(bytes_downloaded), 0) > 0 OR COALESCE(SUM(bytes_uploaded), 0) > 0 OR COALESCE(SUM(screen_time_seconds), 0) > 0
+             ORDER BY (COALESCE(SUM(bytes_downloaded), 0) + COALESCE(SUM(bytes_uploaded), 0)) DESC"
+        }
         "hourly" => {
             // Last 24 hours of raw 5-minute telemetry (to show stats immediately)
             "SELECT process_name, COALESCE(SUM(bytes_downloaded), 0), COALESCE(SUM(bytes_uploaded), 0), COALESCE(SUM(screen_time_seconds), 0)
@@ -198,10 +208,18 @@ pub fn get_stats_for_period(conn: &Connection, period: &str) -> Result<Vec<Proce
              ORDER BY (COALESCE(SUM(bytes_downloaded), 0) + COALESCE(SUM(bytes_uploaded), 0)) DESC"
         }
         "weekly" => {
-            // Last 7 days from raw telemetry (since raw data is purged after 7 days)
+            // Last 7 days: historical daily_stats UNION with today's raw telemetry
             "SELECT process_name, COALESCE(SUM(bytes_downloaded), 0), COALESCE(SUM(bytes_uploaded), 0), COALESCE(SUM(screen_time_seconds), 0)
-             FROM process_telemetry
-             WHERE timestamp >= (strftime('%s', 'now') - 7 * 86400)
+             FROM (
+                 SELECT process_name, bytes_downloaded, bytes_uploaded, screen_time_seconds
+                 FROM daily_stats
+                 WHERE date >= strftime('%Y-%m-%d', 'now', '-7 days', 'localtime')
+                   AND date < strftime('%Y-%m-%d', 'now', 'localtime')
+                 UNION ALL
+                 SELECT process_name, bytes_downloaded, bytes_uploaded, screen_time_seconds
+                 FROM process_telemetry
+                 WHERE strftime('%Y-%m-%d', timestamp, 'unixepoch', 'localtime') = strftime('%Y-%m-%d', 'now', 'localtime')
+             )
              GROUP BY process_name
              HAVING COALESCE(SUM(bytes_downloaded), 0) > 0 OR COALESCE(SUM(bytes_uploaded), 0) > 0 OR COALESCE(SUM(screen_time_seconds), 0) > 0
              ORDER BY (COALESCE(SUM(bytes_downloaded), 0) + COALESCE(SUM(bytes_uploaded), 0)) DESC"
@@ -238,6 +256,39 @@ pub fn get_stats_for_period(conn: &Connection, period: &str) -> Result<Vec<Proce
              GROUP BY process_name
              ORDER BY (COALESCE(SUM(bytes_downloaded), 0) + COALESCE(SUM(bytes_uploaded), 0)) DESC"
         }
+        p if p.starts_with("month_") => {
+            let month_str = p.trim_start_matches("month_");
+            let query = "SELECT process_name, COALESCE(SUM(bytes_downloaded), 0), COALESCE(SUM(bytes_uploaded), 0), COALESCE(SUM(screen_time_seconds), 0)
+             FROM (
+                 SELECT process_name, bytes_downloaded, bytes_uploaded, screen_time_seconds
+                 FROM daily_stats
+                 WHERE strftime('%Y-%m', date) = ?1 AND date < strftime('%Y-%m-%d', 'now', 'localtime')
+                 UNION ALL
+                 SELECT process_name, bytes_downloaded, bytes_uploaded, screen_time_seconds
+                 FROM process_telemetry
+                 WHERE strftime('%Y-%m', timestamp, 'unixepoch', 'localtime') = ?1
+                   AND strftime('%Y-%m-%d', timestamp, 'unixepoch', 'localtime') = strftime('%Y-%m-%d', 'now', 'localtime')
+             )
+             GROUP BY process_name
+             HAVING COALESCE(SUM(bytes_downloaded), 0) > 0 OR COALESCE(SUM(bytes_uploaded), 0) > 0 OR COALESCE(SUM(screen_time_seconds), 0) > 0
+             ORDER BY (COALESCE(SUM(bytes_downloaded), 0) + COALESCE(SUM(bytes_uploaded), 0)) DESC";
+
+            let mut stmt = conn.prepare(query)?;
+            let rows = stmt.query_map(params![month_str], |row| {
+                Ok(ProcessStat {
+                    process_name: row.get(0)?,
+                    bytes_downloaded: row.get(1)?,
+                    bytes_uploaded: row.get(2)?,
+                    screen_time_seconds: row.get(3)?,
+                })
+            })?;
+
+            let mut stats = Vec::new();
+            for row in rows {
+                stats.push(row?);
+            }
+            return Ok(stats);
+        }
         _ => {
             // Default to today
             "SELECT process_name, COALESCE(SUM(bytes_downloaded), 0), COALESCE(SUM(bytes_uploaded), 0), COALESCE(SUM(screen_time_seconds), 0)
@@ -263,6 +314,24 @@ pub fn get_stats_for_period(conn: &Connection, period: &str) -> Result<Vec<Proce
         stats.push(row?);
     }
     Ok(stats)
+}
+
+pub fn get_available_months(conn: &Connection) -> Result<Vec<String>> {
+    let mut stmt = conn.prepare(
+        "SELECT DISTINCT month FROM (
+            SELECT strftime('%Y-%m', date) AS month FROM daily_stats
+            UNION
+            SELECT strftime('%Y-%m', timestamp, 'unixepoch', 'localtime') AS month FROM process_telemetry
+         ) WHERE month IS NOT NULL AND month != '' ORDER BY month DESC"
+    )?;
+    let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+    let mut months = Vec::new();
+    for row in rows {
+        if let Ok(m) = row {
+            months.push(m);
+        }
+    }
+    Ok(months)
 }
 
 // --- New helpers for Data & Storage features ---

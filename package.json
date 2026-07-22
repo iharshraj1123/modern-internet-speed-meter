@@ -1,6 +1,6 @@
 {
-  "name": "tauri-app",
-  "version": "1.2.1",
+  "name": "internet-speed-meter",
+  "version": "1.2.2",
   "description": "",
   "type": "module",
   "scripts": {
