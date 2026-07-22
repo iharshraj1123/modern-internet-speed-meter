@@ -213,7 +213,7 @@ pub struct EtwPidMetrics {
 
 static ETW_PID_STATS: Lazy<Mutex<HashMap<u32, EtwPidMetrics>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 static ETW_ACTIVE: AtomicBool = AtomicBool::new(false);
-static TELEMETRY_ENGINE_MODE: AtomicU8 = AtomicU8::new(0); // 0 = io (default), 1 = estats, 2 = etw
+static TELEMETRY_ENGINE_MODE: AtomicU8 = AtomicU8::new(1); // 0 = io, 1 = estats (default), 2 = etw
 static ETW_EVENT_COUNT: AtomicU64 = AtomicU64::new(0);
 static ETW_BYTE_COUNT: AtomicU64 = AtomicU64::new(0);
 static FILTER_NIS_TRAFFIC: AtomicBool = AtomicBool::new(false);

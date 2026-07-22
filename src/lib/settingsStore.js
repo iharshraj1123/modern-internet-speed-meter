@@ -28,7 +28,7 @@ const DEFAULT_SETTINGS = {
     useEtwTelemetry: false,
     filterNisTraffic: false, // Legacy fallback flag
     attributionMode: 'proportional', // Options: 'proportional' (Default), 'exact', 'system_row'
-    telemetryEngine: 'io' // Options: 'io' (Default), 'estats', 'etw'
+    telemetryEngine: 'estats' // Options: 'estats' (Default), 'io', 'etw'
 };
 
 // Accent color palette definitions

@@ -91,7 +91,7 @@
   let showEtwModal = $state(false);
   let telemetrySubTab = $state('engine'); // 'engine', 'limits'
 
-  let currentEngine = $derived($settings.telemetryEngine || 'io');
+  let currentEngine = $derived($settings.telemetryEngine || 'estats');
 
   let attributionTitle = $derived(
     currentEngine === 'etw'
@@ -664,30 +664,30 @@
               </div>
               
               <div class="engine-cards">
-                <!-- Option 1: Process I/O (Default) -->
+                <!-- Option 1: Process I/O -->
                 <button 
                   type="button"
                   class="engine-card" 
-                  class:active={($settings.telemetryEngine || 'io') === 'io'}
+                  class:active={($settings.telemetryEngine || 'estats') === 'io'}
                   onclick={() => selectTelemetryEngine('io')}
                 >
                   <div class="engine-card-header">
                     <strong>1. Process Activity Mode</strong>
-                    <span class="badge default">Standard Default</span>
+                    <span class="badge">Legacy Fallback</span>
                   </div>
-                  <p>Lightweight app activity monitoring. Extremely low CPU usage, reliable, requires no Administrator permission.</p>
+                  <p>Lightweight app activity monitoring. Low CPU usage, requires no Administrator permission.</p>
                 </button>
 
-                <!-- Option 2: TCP EStats -->
+                <!-- Option 2: TCP EStats (Default) -->
                 <button 
                   type="button"
                   class="engine-card" 
-                  class:active={($settings.telemetryEngine || 'io') === 'estats'}
+                  class:active={($settings.telemetryEngine || 'estats') === 'estats'}
                   onclick={() => selectTelemetryEngine('estats')}
                 >
                   <div class="engine-card-header">
                     <strong>2. Network Socket Mode</strong>
-                    <span class="badge">Standard User</span>
+                    <span class="badge default">Standard Default</span>
                   </div>
                   <p>Direct web socket tracking. High accuracy for web browsing and downloads, requires no Administrator permission.</p>
                 </button>
