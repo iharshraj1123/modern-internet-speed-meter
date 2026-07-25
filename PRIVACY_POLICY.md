@@ -1,6 +1,6 @@
-# Privacy Policy for Internet Speed Meter
+# Privacy Policy for Modern Internet Speed Meter
 
-**Last Updated:** July 21, 2026
+**Last Updated:** July 25, 2026
 
 **Internet Speed Meter** ("the Application", "we", "us", or "our") respects your privacy. This Privacy Policy explains how data is handled when you use the Application on Windows.
 
