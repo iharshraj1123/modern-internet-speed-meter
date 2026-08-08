@@ -16,6 +16,7 @@
         "title": "Speed Widget",
         "width": 250,
         "height": 75,
+        "visible": false,
         "transparent": true,
         "decorations": false,
         "alwaysOnTop": true,

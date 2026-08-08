@@ -24,11 +24,6 @@
     try {
       const appWindow = getCurrentWindow();
       await appWindow.startDragging();
-      const pos = await appWindow.outerPosition().catch(() => null);
-      if (pos && typeof pos.x === 'number' && typeof pos.y === 'number') {
-        const posJson = JSON.stringify({ x: pos.x, y: pos.y });
-        invoke('save_app_setting', { key: 'saved_widget_position', value: posJson }).catch(console.error);
-      }
     } catch (err) {
       console.error("Failed to start window drag", err);
     }
@@ -137,8 +132,16 @@
 
 
 
-    // Auto-elevate to Admin if ETW toggle is ON and app is not elevated
-    if ($settings.useEtwTelemetry || $settings.telemetryEngine === 'etw') {
+    let isRestoringState = true;
+
+    // 1. Load settings directly from SQLite DB first
+    const loadedSettings = await settings.loadFromDb();
+
+    // 2. Sync loaded settings to backend
+    await settings.syncWithBackend(loadedSettings);
+
+    // 3. Auto-elevate to Admin if ETW toggle is ON or engine is 'etw' and app is not elevated
+    if (loadedSettings.useEtwTelemetry || loadedSettings.telemetryEngine === 'etw') {
       try {
         const isElevated = await invoke("is_process_elevated");
         if (!isElevated) {
@@ -149,7 +152,42 @@
       }
     }
 
-    // 1. Fetch initial stats
+    // 4. Restore saved window position directly from SQLite DB (with localStorage fallback for migration)
+    try {
+      let savedPos = await invoke('get_app_setting', { key: 'saved_widget_position' }).catch(() => null);
+      if (!savedPos) {
+        savedPos = localStorage.getItem('saved_widget_position');
+        if (savedPos) {
+          invoke('save_app_setting', { key: 'saved_widget_position', value: savedPos }).catch(console.error);
+        }
+      }
+      if (savedPos) {
+        const parsedPos = JSON.parse(savedPos);
+        if (typeof parsedPos.x === 'number' && typeof parsedPos.y === 'number') {
+          const appWindow = getCurrentWindow();
+          await appWindow.setPosition(new PhysicalPosition(parsedPos.x, parsedPos.y));
+        }
+      }
+    } catch (e) {
+      console.error("Failed to restore window position from SQLite DB", e);
+    }
+
+    // 5. Force restore window size for the loaded graphType
+    await updateWindowSizeForGraphType(null, loadedSettings.graphType);
+
+    // 6. Reveal window once position and size are properly configured (prevents jump/flicker)
+    try {
+      await getCurrentWindow().show();
+    } catch (e) {
+      console.error("Failed to show main window on startup", e);
+    }
+
+    // Allow window position/size to settle before enabling save listeners
+    setTimeout(() => {
+      isRestoringState = false;
+    }, 500);
+
+    // 7. Fetch initial stats
     try {
       const initial = await invoke("get_realtime_stats");
       downloadSpeed = initial.download_speed;
@@ -162,7 +200,7 @@
       console.error("Failed to query initial stats", e);
     }
 
-    // 2. Fetch initial daily limit usage
+    // 8. Fetch initial daily limit usage
     if ($settings.dailyLimitEnabled) {
       try {
         const res = await invoke("get_today_usage");
@@ -174,7 +212,7 @@
       }
     }
 
-    // 3. Register global hotkey
+    // 9. Register global hotkey
     if ($settings.globalHotkey) {
       try {
         await invoke("register_hotkey", { shortcut: $settings.globalHotkey });
@@ -183,7 +221,7 @@
       }
     }
 
-    // 4. Setup real-time listener from Rust backend
+    // 10. Setup real-time listener from Rust backend
     unlistenStats = await listen("realtime-stats", (event) => {
       const data = event.payload;
       downloadSpeed = data.download_speed;
@@ -218,42 +256,6 @@
         }
       }
     });
-
-    let isRestoringState = true;
-
-    // Load settings directly from SQLite DB
-    const loadedSettings = await settings.loadFromDb();
-
-    // Sync initial settings to backend
-    settings.syncWithBackend(loadedSettings);
-
-    // Restore saved window position directly from SQLite DB (with localStorage fallback for migration)
-    try {
-      let savedPos = await invoke('get_app_setting', { key: 'saved_widget_position' }).catch(() => null);
-      if (!savedPos) {
-        savedPos = localStorage.getItem('saved_widget_position');
-        if (savedPos) {
-          invoke('save_app_setting', { key: 'saved_widget_position', value: savedPos }).catch(console.error);
-        }
-      }
-      if (savedPos) {
-        const parsedPos = JSON.parse(savedPos);
-        if (typeof parsedPos.x === 'number' && typeof parsedPos.y === 'number') {
-          const appWindow = getCurrentWindow();
-          await appWindow.setPosition(new PhysicalPosition(parsedPos.x, parsedPos.y));
-        }
-      }
-    } catch (e) {
-      console.error("Failed to restore window position from SQLite DB", e);
-    }
-
-    // Force restore window size for the loaded graphType
-    await updateWindowSizeForGraphType(null, loadedSettings.graphType);
-
-    // Allow window position/size to settle before enabling save listeners
-    setTimeout(() => {
-      isRestoringState = false;
-    }, 500);
 
     // Listen for native window move events to save screen position directly into SQLite DB
     try {
