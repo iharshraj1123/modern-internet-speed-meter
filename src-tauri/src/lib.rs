@@ -397,6 +397,45 @@ pub fn run() {
             let conn = db::init_db(&db_path).unwrap();
             db::aggregate_data(&conn).ok();
 
+            // 1.5 Setup Main Window Position and Size before revealing
+            if let Some(window) = app.get_webview_window("main") {
+                // Parse position
+                if let Ok(Some(pos_json)) = db::get_setting(&conn, "saved_widget_position") {
+                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&pos_json) {
+                        if let (Some(x), Some(y)) = (val["x"].as_i64(), val["y"].as_i64()) {
+                            let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x: x as i32, y: y as i32 }));
+                        }
+                    }
+                }
+                
+                // Parse dimensions
+                let mut target_w = 230.0;
+                let mut target_h = 80.0;
+                if let Ok(Some(dim_json)) = db::get_setting(&conn, "saved_widget_dimensions") {
+                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&dim_json) {
+                        if let (Some(w), Some(h)) = (val["width"].as_f64(), val["height"].as_f64()) {
+                            target_w = w;
+                            target_h = h;
+                        }
+                    }
+                }
+                
+                // Check if collapsed mode
+                let mut is_hidden = false;
+                if let Ok(Some(settings_json)) = db::get_setting(&conn, "speed_meter_settings") {
+                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&settings_json) {
+                        if let Some(gt) = val["graphType"].as_str() {
+                            if gt == "hidden" {
+                                is_hidden = true;
+                            }
+                        }
+                    }
+                }
+                
+                let final_h = if is_hidden { 34.0 } else { target_h };
+                let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize { width: target_w, height: final_h }));
+            }
+
             // 2. Initialize Telemetry Service
             let (telemetry_service, mut stats_rx) = telemetry::TelemetryService::new(db_path);
             telemetry_service.start();

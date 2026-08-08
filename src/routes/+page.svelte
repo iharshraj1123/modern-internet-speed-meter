@@ -5,6 +5,8 @@
   import { getCurrentWindow, LogicalSize, PhysicalPosition } from "@tauri-apps/api/window";
   import { settings, formatSpeed } from "../lib/settingsStore";
 
+  let isRestoringState = $state(true);
+
   // State cache for speeds
   let downloadSpeed = $state(0);
   let uploadSpeed = $state(0);
@@ -130,10 +132,6 @@
     // Custom context menu listener
     document.addEventListener("contextmenu", handleContextMenu);
 
-
-
-    let isRestoringState = true;
-
     // 1. Load settings directly from SQLite DB first
     const loadedSettings = await settings.loadFromDb();
 
@@ -152,40 +150,20 @@
       }
     }
 
-    // 4. Restore saved window position directly from SQLite DB (with localStorage fallback for migration)
-    try {
-      let savedPos = await invoke('get_app_setting', { key: 'saved_widget_position' }).catch(() => null);
-      if (!savedPos) {
-        savedPos = localStorage.getItem('saved_widget_position');
-        if (savedPos) {
-          invoke('save_app_setting', { key: 'saved_widget_position', value: savedPos }).catch(console.error);
-        }
-      }
-      if (savedPos) {
-        const parsedPos = JSON.parse(savedPos);
-        if (typeof parsedPos.x === 'number' && typeof parsedPos.y === 'number') {
-          const appWindow = getCurrentWindow();
-          await appWindow.setPosition(new PhysicalPosition(parsedPos.x, parsedPos.y));
-        }
-      }
-    } catch (e) {
-      console.error("Failed to restore window position from SQLite DB", e);
-    }
-
-    // 5. Force restore window size for the loaded graphType
-    await updateWindowSizeForGraphType(null, loadedSettings.graphType);
-
-    // 6. Reveal window once position and size are properly configured (prevents jump/flicker)
+    // 4. Reveal window since Rust setup has already positioned and sized it
     try {
       await getCurrentWindow().show();
     } catch (e) {
       console.error("Failed to show main window on startup", e);
     }
 
-    // Allow window position/size to settle before enabling save listeners
+    // 5. Force restore window constraints for the loaded graphType
+    await updateWindowSizeForGraphType(null, loadedSettings.graphType);
+
+    // Allow window to settle before enabling save listeners and revealing UI
     setTimeout(() => {
       isRestoringState = false;
-    }, 500);
+    }, 200);
 
     // 7. Fetch initial stats
     try {
@@ -258,12 +236,17 @@
     });
 
     // Listen for native window move events to save screen position directly into SQLite DB
+    let moveTimeout = null;
     try {
-      unlistenMoved = await getCurrentWindow().onMoved(async (pos) => {
+      unlistenMoved = await getCurrentWindow().onMoved(async (event) => {
         if (isRestoringState) return;
-        if (typeof window !== 'undefined' && pos && typeof pos.x === 'number') {
-          const posJson = JSON.stringify({ x: pos.x, y: pos.y });
-          invoke('save_app_setting', { key: 'saved_widget_position', value: posJson }).catch(console.error);
+        const position = event.payload;
+        if (typeof window !== 'undefined' && position && typeof position.x === 'number') {
+          if (moveTimeout) clearTimeout(moveTimeout);
+          moveTimeout = setTimeout(() => {
+            const posJson = JSON.stringify({ x: position.x, y: position.y });
+            invoke('save_app_setting', { key: 'saved_widget_position', value: posJson }).catch(console.error);
+          }, 300);
         }
       });
     } catch (e) {
@@ -289,7 +272,7 @@
               settings.update(s => ({ ...s, graphType: 'hidden' }));
               setTimeout(() => { isResizingToggle = false; }, 300);
             } else {
-              saveCurrentDimensionsIfExpanded();
+              saveCurrentDimensions();
             }
           } else {
             if (h > 52) {
@@ -297,8 +280,11 @@
               const restoredType = await invoke('get_app_setting', { key: 'last_expanded_graph_type' }).catch(() => null) || 'combined';
               settings.update(s => ({ ...s, graphType: restoredType }));
               setTimeout(() => { isResizingToggle = false; }, 300);
-            } else if (h !== COLLAPSED_HEIGHT) {
-              await appWindow.setSize(new LogicalSize(w, COLLAPSED_HEIGHT));
+            } else {
+              saveCurrentDimensions();
+              if (h !== COLLAPSED_HEIGHT) {
+                await appWindow.setSize(new LogicalSize(w, COLLAPSED_HEIGHT));
+              }
             }
           }
         } catch (e) {
@@ -325,17 +311,35 @@
   let unlistenResize = null;
   let unlistenMoved = null;
 
-  async function saveCurrentDimensionsIfExpanded() {
-    if ($settings.graphType === 'hidden') return;
+  let resizeTimeout = null;
+
+  async function saveCurrentDimensions() {
     try {
       const appWindow = getCurrentWindow();
       const size = await appWindow.outerSize();
       const factor = await appWindow.scaleFactor().catch(() => 1);
       const w = Math.round(size.width / factor);
       const h = Math.round(size.height / factor);
-      if (w > 50 && h > 45) {
-        const dimJson = JSON.stringify({ width: w, height: h });
-        invoke('save_app_setting', { key: 'saved_widget_dimensions', value: dimJson }).catch(console.error);
+      if (w > 50) {
+        if (resizeTimeout) clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(async () => {
+          let targetH = h;
+          if ($settings.graphType === 'hidden') {
+            let saved = await invoke('get_app_setting', { key: 'saved_widget_dimensions' }).catch(() => null);
+            if (saved) {
+              try {
+                const parsed = JSON.parse(saved);
+                if (parsed.height) targetH = parsed.height;
+              } catch(e) {}
+            } else {
+              targetH = DEFAULT_EXPANDED_HEIGHT;
+            }
+          } else {
+            if (h <= 45) return;
+          }
+          const dimJson = JSON.stringify({ width: w, height: targetH });
+          invoke('save_app_setting', { key: 'saved_widget_dimensions', value: dimJson }).catch(console.error);
+        }, 300);
       }
     } catch (e) {
       console.error("Failed to save widget dimensions", e);
@@ -349,6 +353,28 @@
       const currentSize = await appWindow.outerSize();
       const currentWidth = Math.round(currentSize.width / factor);
 
+      let targetWidth = DEFAULT_EXPANDED_WIDTH;
+      let targetHeight = DEFAULT_EXPANDED_HEIGHT;
+
+      let saved = await invoke('get_app_setting', { key: 'saved_widget_dimensions' }).catch(() => null);
+      if (!saved) {
+        saved = localStorage.getItem('saved_widget_dimensions');
+        if (saved) {
+          invoke('save_app_setting', { key: 'saved_widget_dimensions', value: saved }).catch(console.error);
+        }
+      }
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.width && parsed.height) {
+            targetWidth = parsed.width;
+            targetHeight = parsed.height;
+          }
+        } catch (e) {
+          console.error("Failed to parse saved widget dimensions", e);
+        }
+      }
+
       if (newType === 'hidden') {
         // Save current dimensions before collapsing if coming from an expanded mode
         if (oldType && oldType !== 'hidden') {
@@ -356,38 +382,16 @@
           if (currentWidth > 50 && currentHeight > 45) {
             const dimJson = JSON.stringify({ width: currentWidth, height: currentHeight });
             invoke('save_app_setting', { key: 'saved_widget_dimensions', value: dimJson }).catch(console.error);
+            targetWidth = currentWidth;
           }
         }
-        await appWindow.setSize(new LogicalSize(currentWidth, COLLAPSED_HEIGHT));
+        await appWindow.setSize(new LogicalSize(targetWidth, COLLAPSED_HEIGHT));
         await appWindow.setMinSize(new LogicalSize(100, COLLAPSED_HEIGHT));
         await appWindow.setMaxSize(new LogicalSize(10000, COLLAPSED_HEIGHT));
       } else {
         // Remove height restrictions when returning to or booting into expanded graph mode
         await appWindow.setMinSize(new LogicalSize(100, COLLAPSED_HEIGHT));
         await appWindow.setMaxSize(null);
-
-        // Revert back from hidden or load saved dimensions directly from SQLite DB
-        let targetWidth = DEFAULT_EXPANDED_WIDTH;
-        let targetHeight = DEFAULT_EXPANDED_HEIGHT;
-
-        let saved = await invoke('get_app_setting', { key: 'saved_widget_dimensions' }).catch(() => null);
-        if (!saved) {
-          saved = localStorage.getItem('saved_widget_dimensions');
-          if (saved) {
-            invoke('save_app_setting', { key: 'saved_widget_dimensions', value: saved }).catch(console.error);
-          }
-        }
-        if (saved) {
-          try {
-            const parsed = JSON.parse(saved);
-            if (parsed.width && parsed.height) {
-              targetWidth = parsed.width;
-              targetHeight = parsed.height;
-            }
-          } catch (e) {
-            console.error("Failed to parse saved widget dimensions", e);
-          }
-        }
 
         await appWindow.setSize(new LogicalSize(targetWidth, targetHeight));
       }
@@ -498,7 +502,7 @@
     class="widget" 
     class:hide-peak={$settings.showWidgetPeak === false}
     class:hidden-graph={$settings.graphType === 'hidden'}
-    style="opacity: {$settings.opacity};"
+    style="opacity: {isRestoringState ? 0 : $settings.opacity}; transition: opacity 0.3s ease;"
     ondblclick={handleDoubleClick}
     onmousedown={startDrag}
   >
