@@ -123,11 +123,12 @@
       : 'Scales active process speeds proportionally up/down so all process totals equal 100% of physical NIC hardware bandwidth. Eliminates "System" rows while staying 100% accurate to your ISP bill.'
   );
 
-  function selectTelemetryEngine(mode) {
+  async function selectTelemetryEngine(mode) {
     updateSetting("telemetryEngine", mode);
     updateSetting("useEtwTelemetry", mode === "etw");
     try {
-      invoke("set_telemetry_engine", { engine: mode });
+      await settings.syncWithBackend({ ...$settings, telemetryEngine: mode, useEtwTelemetry: mode === "etw" });
+      await invoke("set_telemetry_engine", { engine: mode });
     } catch (e) {
       console.error("Failed to set telemetry engine", e);
     }
@@ -142,7 +143,9 @@
     try {
       updateSetting("telemetryEngine", "etw");
       updateSetting("useEtwTelemetry", true);
-      await settings.syncWithBackend({ ...$settings, telemetryEngine: "etw", useEtwTelemetry: true });
+      const nextSettings = { ...$settings, telemetryEngine: "etw", useEtwTelemetry: true };
+      await invoke("save_app_setting", { key: "speed_meter_settings", value: JSON.stringify(nextSettings) });
+      await settings.syncWithBackend(nextSettings);
       await invoke("set_telemetry_engine", { engine: "etw" });
       await invoke("restart_as_admin");
     } catch (err) {
@@ -152,6 +155,11 @@
   }
 
   onMount(async () => {
+    try {
+      await settings.loadFromDb();
+    } catch (e) {
+      console.error("Failed to load settings from DB in settings page", e);
+    }
     try {
       autostartEnabled = await invoke("plugin:autostart|is_enabled");
     } catch (e) {
@@ -1095,7 +1103,7 @@
 
           <div class="app-version-info">
             <span class="version-label">Internet Speed Meter</span>
-            <span class="version-number">Version 1.2.0</span>
+            <span class="version-number">Version 1.2.3</span>
             <span class="version-copy">Made with care for everyone</span>
           </div>
         </section>

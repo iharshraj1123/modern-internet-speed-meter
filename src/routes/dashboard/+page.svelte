@@ -331,7 +331,12 @@
   }
 
   onMount(async () => {
-    // 1. Load initial values
+    // 1. Load settings from SQLite DB
+    try {
+      await settings.loadFromDb();
+    } catch (e) {}
+
+    // 2. Load initial values
     loadStats();
 
     // 2. Listen to real-time stats

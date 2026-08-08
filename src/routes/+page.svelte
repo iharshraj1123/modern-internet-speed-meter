@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import { listen } from "@tauri-apps/api/event";
   import { invoke } from "@tauri-apps/api/core";
-  import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
+  import { getCurrentWindow, LogicalSize, PhysicalPosition } from "@tauri-apps/api/window";
   import { settings, formatSpeed } from "../lib/settingsStore";
 
   // State cache for speeds
@@ -22,7 +22,13 @@
     if (event.detail >= 2) return;        // skip on double-click — let ondblclick fire
     event.preventDefault();
     try {
-      await getCurrentWindow().startDragging();
+      const appWindow = getCurrentWindow();
+      await appWindow.startDragging();
+      const pos = await appWindow.outerPosition().catch(() => null);
+      if (pos && typeof pos.x === 'number' && typeof pos.y === 'number') {
+        const posJson = JSON.stringify({ x: pos.x, y: pos.y });
+        invoke('save_app_setting', { key: 'saved_widget_position', value: posJson }).catch(console.error);
+      }
     } catch (err) {
       console.error("Failed to start window drag", err);
     }
@@ -129,12 +135,7 @@
     // Custom context menu listener
     document.addEventListener("contextmenu", handleContextMenu);
 
-    // Sync saved telemetry engine setting with Rust backend on app startup
-    try {
-      await settings.syncWithBackend($settings);
-    } catch (e) {
-      console.error("Failed to sync initial settings with backend", e);
-    }
+
 
     // Auto-elevate to Admin if ETW toggle is ON and app is not elevated
     if ($settings.useEtwTelemetry || $settings.telemetryEngine === 'etw') {
@@ -218,14 +219,60 @@
       }
     });
 
+    let isRestoringState = true;
+
+    // Load settings directly from SQLite DB
+    const loadedSettings = await settings.loadFromDb();
+
     // Sync initial settings to backend
-    settings.syncWithBackend($settings);
+    settings.syncWithBackend(loadedSettings);
+
+    // Restore saved window position directly from SQLite DB (with localStorage fallback for migration)
+    try {
+      let savedPos = await invoke('get_app_setting', { key: 'saved_widget_position' }).catch(() => null);
+      if (!savedPos) {
+        savedPos = localStorage.getItem('saved_widget_position');
+        if (savedPos) {
+          invoke('save_app_setting', { key: 'saved_widget_position', value: savedPos }).catch(console.error);
+        }
+      }
+      if (savedPos) {
+        const parsedPos = JSON.parse(savedPos);
+        if (typeof parsedPos.x === 'number' && typeof parsedPos.y === 'number') {
+          const appWindow = getCurrentWindow();
+          await appWindow.setPosition(new PhysicalPosition(parsedPos.x, parsedPos.y));
+        }
+      }
+    } catch (e) {
+      console.error("Failed to restore window position from SQLite DB", e);
+    }
+
+    // Force restore window size for the loaded graphType
+    await updateWindowSizeForGraphType(null, loadedSettings.graphType);
+
+    // Allow window position/size to settle before enabling save listeners
+    setTimeout(() => {
+      isRestoringState = false;
+    }, 500);
+
+    // Listen for native window move events to save screen position directly into SQLite DB
+    try {
+      unlistenMoved = await getCurrentWindow().onMoved(async (pos) => {
+        if (isRestoringState) return;
+        if (typeof window !== 'undefined' && pos && typeof pos.x === 'number') {
+          const posJson = JSON.stringify({ x: pos.x, y: pos.y });
+          invoke('save_app_setting', { key: 'saved_widget_position', value: posJson }).catch(console.error);
+        }
+      });
+    } catch (e) {
+      console.error("Failed to attach moved listener", e);
+    }
 
     // Listen for native window resize events to save custom expanded dimensions or auto-collapse/expand graph on vertical drag
     let isResizingToggle = false;
     try {
       unlistenResize = await getCurrentWindow().onResized(async () => {
-        if (isResizingToggle) return;
+        if (isRestoringState || isResizingToggle) return;
         try {
           const appWindow = getCurrentWindow();
           const factor = await appWindow.scaleFactor().catch(() => 1);
@@ -236,7 +283,7 @@
           if ($settings.graphType !== 'hidden') {
             if (h <= 50) {
               isResizingToggle = true;
-              localStorage.setItem('last_expanded_graph_type', $settings.graphType);
+              invoke('save_app_setting', { key: 'last_expanded_graph_type', value: $settings.graphType }).catch(console.error);
               settings.update(s => ({ ...s, graphType: 'hidden' }));
               setTimeout(() => { isResizingToggle = false; }, 300);
             } else {
@@ -245,7 +292,7 @@
           } else {
             if (h > 52) {
               isResizingToggle = true;
-              const restoredType = localStorage.getItem('last_expanded_graph_type') || 'combined';
+              const restoredType = await invoke('get_app_setting', { key: 'last_expanded_graph_type' }).catch(() => null) || 'combined';
               settings.update(s => ({ ...s, graphType: restoredType }));
               setTimeout(() => { isResizingToggle = false; }, 300);
             } else if (h !== COLLAPSED_HEIGHT) {
@@ -265,6 +312,7 @@
     document.removeEventListener("contextmenu", handleContextMenu);
     if (unlistenStats) unlistenStats();
     if (unlistenResize) unlistenResize();
+    if (unlistenMoved) unlistenMoved();
   });
 
   const COLLAPSED_HEIGHT = 34;
@@ -273,6 +321,7 @@
 
   let prevGraphType = $state(null);
   let unlistenResize = null;
+  let unlistenMoved = null;
 
   async function saveCurrentDimensionsIfExpanded() {
     if ($settings.graphType === 'hidden') return;
@@ -283,7 +332,8 @@
       const w = Math.round(size.width / factor);
       const h = Math.round(size.height / factor);
       if (w > 50 && h > 45) {
-        localStorage.setItem('saved_widget_dimensions', JSON.stringify({ width: w, height: h }));
+        const dimJson = JSON.stringify({ width: w, height: h });
+        invoke('save_app_setting', { key: 'saved_widget_dimensions', value: dimJson }).catch(console.error);
       }
     } catch (e) {
       console.error("Failed to save widget dimensions", e);
@@ -302,25 +352,29 @@
         if (oldType && oldType !== 'hidden') {
           const currentHeight = Math.round(currentSize.height / factor);
           if (currentWidth > 50 && currentHeight > 45) {
-            localStorage.setItem('saved_widget_dimensions', JSON.stringify({
-              width: currentWidth,
-              height: currentHeight
-            }));
+            const dimJson = JSON.stringify({ width: currentWidth, height: currentHeight });
+            invoke('save_app_setting', { key: 'saved_widget_dimensions', value: dimJson }).catch(console.error);
           }
         }
         await appWindow.setSize(new LogicalSize(currentWidth, COLLAPSED_HEIGHT));
         await appWindow.setMinSize(new LogicalSize(100, COLLAPSED_HEIGHT));
         await appWindow.setMaxSize(new LogicalSize(10000, COLLAPSED_HEIGHT));
-      } else if (oldType === 'hidden') {
-        // Remove height restrictions when returning to expanded graph mode
+      } else {
+        // Remove height restrictions when returning to or booting into expanded graph mode
         await appWindow.setMinSize(new LogicalSize(100, COLLAPSED_HEIGHT));
         await appWindow.setMaxSize(null);
 
-        // Revert back from hidden to expanded mode
+        // Revert back from hidden or load saved dimensions directly from SQLite DB
         let targetWidth = DEFAULT_EXPANDED_WIDTH;
         let targetHeight = DEFAULT_EXPANDED_HEIGHT;
 
-        const saved = localStorage.getItem('saved_widget_dimensions');
+        let saved = await invoke('get_app_setting', { key: 'saved_widget_dimensions' }).catch(() => null);
+        if (!saved) {
+          saved = localStorage.getItem('saved_widget_dimensions');
+          if (saved) {
+            invoke('save_app_setting', { key: 'saved_widget_dimensions', value: saved }).catch(console.error);
+          }
+        }
         if (saved) {
           try {
             const parsed = JSON.parse(saved);
@@ -344,9 +398,7 @@
     const currentType = $settings.graphType;
     if (prevGraphType === null) {
       prevGraphType = currentType;
-      if (currentType === 'hidden') {
-        updateWindowSizeForGraphType(null, 'hidden');
-      }
+      updateWindowSizeForGraphType(null, currentType);
       return;
     }
 

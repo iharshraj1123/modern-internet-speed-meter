@@ -419,3 +419,40 @@ pub fn vacuum_db(conn: &Connection) -> Result<()> {
     conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE); VACUUM;")?;
     Ok(())
 }
+
+pub fn save_setting(conn: &Connection, key: &str, value: &str) -> Result<()> {
+    println!("DEBUG: saving setting {} = {}", key, value);
+    conn.execute(
+        "INSERT INTO app_settings (key, value) VALUES (?1, ?2)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        params![key, value],
+    )?;
+    Ok(())
+}
+
+pub fn get_setting(conn: &Connection, key: &str) -> Result<Option<String>> {
+    let mut stmt = conn.prepare("SELECT value FROM app_settings WHERE key = ?1")?;
+    let mut rows = stmt.query(params![key])?;
+    if let Some(row) = rows.next()? {
+        let val: String = row.get(0)?;
+        println!("DEBUG: retrieved setting {} = {}", key, val);
+        Ok(Some(val))
+    } else {
+        println!("DEBUG: setting {} NOT FOUND", key);
+        Ok(None)
+    }
+}
+
+pub fn get_all_settings(conn: &Connection) -> Result<std::collections::HashMap<String, String>> {
+    let mut stmt = conn.prepare("SELECT key, value FROM app_settings")?;
+    let rows = stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })?;
+    let mut map = std::collections::HashMap::new();
+    for r in rows {
+        if let Ok((k, v)) = r {
+            map.insert(k, v);
+        }
+    }
+    Ok(map)
+}

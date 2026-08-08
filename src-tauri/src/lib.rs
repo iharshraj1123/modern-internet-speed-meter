@@ -341,6 +341,31 @@ async fn unregister_hotkey(app: AppHandle) -> Result<(), String> {
     app.global_shortcut().unregister_all().map_err(|e| e.to_string())
 }
 
+// Tauri command: Save setting key-value pair to SQLite DB
+#[tauri::command]
+async fn save_app_setting(key: String, value: String) -> Result<(), String> {
+    let path = DB_PATH.lock().unwrap().clone();
+    let conn = db::open_conn(&path).map_err(|e| e.to_string())?;
+    db::save_setting(&conn, &key, &value).map_err(|e| e.to_string())
+}
+
+// Tauri command: Get individual setting from SQLite DB
+#[tauri::command]
+async fn get_app_setting(key: String) -> Result<Option<String>, String> {
+    let path = DB_PATH.lock().unwrap().clone();
+    let conn = db::open_conn(&path).map_err(|e| e.to_string())?;
+    db::get_setting(&conn, &key).map_err(|e| e.to_string())
+}
+
+// Tauri command: Get all settings key-value pairs from SQLite DB
+#[tauri::command]
+async fn get_all_app_settings() -> Result<std::collections::HashMap<String, String>, String> {
+    let path = DB_PATH.lock().unwrap().clone();
+    let conn = db::open_conn(&path).map_err(|e| e.to_string())?;
+    db::get_all_settings(&conn).map_err(|e| e.to_string())
+}
+
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -503,6 +528,9 @@ pub fn run() {
             set_filter_nis_traffic,
             get_telemetry_debug_info,
             get_available_months,
+            save_app_setting,
+            get_app_setting,
+            get_all_app_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

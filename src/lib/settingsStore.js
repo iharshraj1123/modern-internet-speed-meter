@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store';
 import { invoke } from '@tauri-apps/api/core';
+import { emit, listen } from '@tauri-apps/api/event';
 
 // Settings defaults
 const DEFAULT_SETTINGS = {
@@ -55,18 +56,7 @@ export function applyAccentTheme(accentName, theme) {
 }
 
 function createSettingsStore() {
-    // Load from localStorage if present
     let initial = { ...DEFAULT_SETTINGS };
-    if (typeof window !== 'undefined') {
-        const stored = localStorage.getItem('speed_meter_settings');
-        if (stored) {
-            try {
-                initial = { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
-            } catch (e) {
-                console.error("Failed to parse settings", e);
-            }
-        }
-    }
 
     const store = writable(initial);
     const { subscribe, set, update } = store;
@@ -81,37 +71,67 @@ function createSettingsStore() {
             }
         });
 
-        // Sync settings dynamically across multiple WebView2 windows using standard storage events
-        window.addEventListener('storage', (e) => {
-            if (e.key === 'speed_meter_settings' && e.newValue) {
-                try {
-                    const parsed = JSON.parse(e.newValue);
-                    store.set({ ...DEFAULT_SETTINGS, ...parsed });
-                } catch (err) {
-                    console.error("Failed to sync store from storage event", err);
-                }
+        // Cross-window synchronization: Listen for setting changes from other WebView windows
+        listen('settings-changed', (event) => {
+            if (event.payload) {
+                store.set({ ...DEFAULT_SETTINGS, ...event.payload });
             }
-        });
+        }).catch(err => console.error("Failed to listen for settings-changed", err));
     }
+
+    const saveToDb = async (value) => {
+        if (typeof window === 'undefined') return;
+        try {
+
+            await invoke('save_app_setting', { key: 'speed_meter_settings', value: JSON.stringify(value) });
+            await emit('settings-changed', value);
+        } catch (err) {
+            console.error("Failed to save settings to SQLite DB", err);
+        }
+    };
 
     return {
         subscribe,
         set: (value) => {
-            if (typeof window !== 'undefined') {
-                localStorage.setItem('speed_meter_settings', JSON.stringify(value));
-            }
             set(value);
+            saveToDb(value);
         },
         update: (updater) => {
             update(current => {
                 const next = updater(current);
-                if (typeof window !== 'undefined') {
-                    localStorage.setItem('speed_meter_settings', JSON.stringify(next));
-                }
+                saveToDb(next);
                 return next;
             });
         },
-        // Sync specific settings with Rust backend
+        // Primary loader: reads directly from SQLite DB
+        loadFromDb: async () => {
+            if (typeof window === 'undefined') return DEFAULT_SETTINGS;
+            try {
+                const dbValue = await invoke('get_app_setting', { key: 'speed_meter_settings' });
+                if (dbValue) {
+                    const parsed = JSON.parse(dbValue);
+                    const merged = { ...DEFAULT_SETTINGS, ...parsed };
+                    store.set(merged);
+                    return merged;
+                } else {
+                    // One-time migration: If SQLite DB is empty, check legacy localStorage
+                    const legacy = localStorage.getItem('speed_meter_settings');
+                    if (legacy) {
+                        try {
+                            const parsed = JSON.parse(legacy);
+                            const merged = { ...DEFAULT_SETTINGS, ...parsed };
+                            store.set(merged);
+                            await saveToDb(merged);
+                            return merged;
+                        } catch (e) {}
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to load settings from SQLite DB", e);
+            }
+            return DEFAULT_SETTINGS;
+        },
+        // Sync specific runtime configuration with Rust backend & persist to SQLite DB
         syncWithBackend: async (settings) => {
             try {
                 await invoke('set_widget_locked', { locked: settings.locked });
@@ -120,6 +140,8 @@ function createSettingsStore() {
                 await invoke('set_telemetry_engine', { engine });
                 await invoke('set_attribution_mode', { mode: settings.attributionMode || 'proportional' });
                 await invoke('set_filter_nis_traffic', { enabled: settings.attributionMode === 'system_row' || (settings.filterNisTraffic ?? false) });
+                // Primary persistence to SQLite DB
+                await saveToDb(settings);
             } catch (e) {
                 console.error("Backend sync failed", e);
             }
