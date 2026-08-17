@@ -31,7 +31,7 @@ static ALERTED_THRESHOLDS: Lazy<Mutex<std::collections::HashSet<String>>> =
 // Tauri command: Get current real-time stats
 #[tauri::command]
 fn get_realtime_stats() -> telemetry::RealtimeStats {
-    LATEST_STATS.lock().unwrap().clone()
+    LATEST_STATS.lock().map(|s| s.clone()).unwrap_or_else(|e| e.into_inner().clone())
 }
 
 // Tauri command: Check if process is running with Administrator privileges
@@ -385,56 +385,65 @@ pub fn run() {
                 }
             }
 
-            // 1. Setup SQLite Database in App Local Directory
-            let app_dir = app.path().app_data_dir().unwrap();
-            std::fs::create_dir_all(&app_dir).unwrap();
+            // 1. Setup SQLite Database in App Local Directory safely
+            let app_dir = app.path().app_data_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+            let _ = std::fs::create_dir_all(&app_dir);
             let db_path = app_dir.join("speed_meter.db").to_string_lossy().into_owned();
             
             // Store DB Path globally
-            *DB_PATH.lock().unwrap() = db_path.clone();
+            if let Ok(mut path_guard) = DB_PATH.lock() {
+                *path_guard = db_path.clone();
+            }
 
-            // Initialize SQLite schema
-            let conn = db::init_db(&db_path).unwrap();
-            db::aggregate_data(&conn).ok();
-
-            // 1.5 Setup Main Window Position and Size before revealing
-            if let Some(window) = app.get_webview_window("main") {
-                // Parse position
-                if let Ok(Some(pos_json)) = db::get_setting(&conn, "saved_widget_position") {
-                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&pos_json) {
-                        if let (Some(x), Some(y)) = (val["x"].as_i64(), val["y"].as_i64()) {
-                            let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x: x as i32, y: y as i32 }));
-                        }
-                    }
-                }
-                
-                // Parse dimensions
-                let mut target_w = 230.0;
-                let mut target_h = 80.0;
-                if let Ok(Some(dim_json)) = db::get_setting(&conn, "saved_widget_dimensions") {
-                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&dim_json) {
-                        if let (Some(w), Some(h)) = (val["width"].as_f64(), val["height"].as_f64()) {
-                            target_w = w;
-                            target_h = h;
-                        }
-                    }
-                }
-                
-                // Check if collapsed mode
-                let mut is_hidden = false;
-                if let Ok(Some(settings_json)) = db::get_setting(&conn, "speed_meter_settings") {
-                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&settings_json) {
-                        if let Some(gt) = val["graphType"].as_str() {
-                            if gt == "hidden" {
-                                is_hidden = true;
+            // Initialize SQLite schema safely
+            if let Ok(conn) = db::init_db(&db_path) {
+                // 1.5 Setup Main Window Position and Size before revealing
+                if let Some(window) = app.get_webview_window("main") {
+                    // Parse position
+                    if let Ok(Some(pos_json)) = db::get_setting(&conn, "saved_widget_position") {
+                        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&pos_json) {
+                            if let (Some(x), Some(y)) = (val["x"].as_i64(), val["y"].as_i64()) {
+                                let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x: x as i32, y: y as i32 }));
                             }
                         }
                     }
+                    
+                    // Parse dimensions
+                    let mut target_w = 230.0;
+                    let mut target_h = 80.0;
+                    if let Ok(Some(dim_json)) = db::get_setting(&conn, "saved_widget_dimensions") {
+                        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&dim_json) {
+                            if let (Some(w), Some(h)) = (val["width"].as_f64(), val["height"].as_f64()) {
+                                target_w = w;
+                                target_h = h;
+                            }
+                        }
+                    }
+                    
+                    // Check if collapsed mode
+                    let mut is_hidden = false;
+                    if let Ok(Some(settings_json)) = db::get_setting(&conn, "speed_meter_settings") {
+                        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&settings_json) {
+                            if let Some(gt) = val["graphType"].as_str() {
+                                if gt == "hidden" {
+                                    is_hidden = true;
+                                }
+                            }
+                        }
+                    }
+                    
+                    let final_h = if is_hidden { 34.0 } else { target_h };
+                    let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize { width: target_w, height: final_h }));
                 }
-                
-                let final_h = if is_hidden { 34.0 } else { target_h };
-                let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize { width: target_w, height: final_h }));
             }
+
+            // Move database rollup & maintenance to a background task to prevent main-thread UI hangs on startup
+            let db_path_bg = db_path.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                if let Ok(conn) = db::open_conn(&db_path_bg) {
+                    let _ = db::aggregate_data(&conn);
+                }
+            });
 
             // 2. Initialize Telemetry Service
             let (telemetry_service, mut stats_rx) = telemetry::TelemetryService::new(db_path);
@@ -444,7 +453,9 @@ pub fn run() {
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 while let Ok(stats) = stats_rx.recv().await {
-                    *LATEST_STATS.lock().unwrap() = stats.clone();
+                    if let Ok(mut stats_guard) = LATEST_STATS.lock() {
+                        *stats_guard = stats.clone();
+                    }
                     let _ = app_handle.emit("realtime-stats", stats);
                 }
             });
@@ -461,82 +472,90 @@ pub fn run() {
                 }
             });
 
-            // 5. Construct Tray Icon & Menu
-            let toggle_widget = MenuItem::with_id(app, "toggle_widget", "Show/Hide Widget", true, None::<&str>).unwrap();
-            let open_dash = MenuItem::with_id(app, "open_dashboard", "Open Dashboard", true, None::<&str>).unwrap();
-            let open_set = MenuItem::with_id(app, "open_settings", "Settings", true, None::<&str>).unwrap();
-            let quit_app = MenuItem::with_id(app, "quit", "Exit", true, None::<&str>).unwrap();
+            // 5. Construct Tray Icon & Menu safely
+            if let (Ok(toggle_widget), Ok(open_dash), Ok(open_set), Ok(quit_app), Ok(sep)) = (
+                MenuItem::with_id(app, "toggle_widget", "Show/Hide Widget", true, None::<&str>),
+                MenuItem::with_id(app, "open_dashboard", "Open Dashboard", true, None::<&str>),
+                MenuItem::with_id(app, "open_settings", "Settings", true, None::<&str>),
+                MenuItem::with_id(app, "quit", "Exit", true, None::<&str>),
+                PredefinedMenuItem::separator(app),
+            ) {
+                if let Ok(tray_menu) = Menu::with_items(app, &[
+                    &toggle_widget,
+                    &open_dash,
+                    &open_set,
+                    &sep,
+                    &quit_app,
+                ]) {
+                    let mut builder = TrayIconBuilder::new()
+                        .tooltip("Internet Speed Meter")
+                        .menu(&tray_menu)
+                        .show_menu_on_left_click(false);
 
-            let tray_menu = Menu::with_items(app, &[
-                &toggle_widget,
-                &open_dash,
-                &open_set,
-                &PredefinedMenuItem::separator(app).unwrap(),
-                &quit_app,
-            ]).unwrap();
-
-            let _tray = TrayIconBuilder::new()
-                .icon(app.default_window_icon().unwrap().clone())
-                .tooltip("Internet Speed Meter")
-                .menu(&tray_menu)
-                .show_menu_on_left_click(false)
-                .on_tray_icon_event(|tray, event| {
-                    if let tauri::tray::TrayIconEvent::Click {
-                        button: tauri::tray::MouseButton::Left,
-                        button_state: tauri::tray::MouseButtonState::Up,
-                        ..
-                    } = event {
-                        let app_handle = tray.app_handle();
-                        if let Some(w) = app_handle.get_webview_window("main") {
-                            if let Ok(visible) = w.is_visible() {
-                                if visible {
-                                    w.hide().unwrap();
-                                } else {
-                                    w.show().unwrap();
-                                    w.set_focus().unwrap();
-                                }
-                            }
-                        }
+                    if let Some(icon) = app.default_window_icon() {
+                        builder = builder.icon(icon.clone());
                     }
-                })
-                .on_menu_event(|app_handle, event| {
-                    match event.id.as_ref() {
-                        "toggle_widget" => {
-                            if let Some(w) = app_handle.get_webview_window("main") {
-                                if let Ok(visible) = w.is_visible() {
-                                    if visible {
-                                        w.hide().unwrap();
-                                    } else {
-                                        w.show().unwrap();
-                                        w.set_focus().unwrap();
+
+                    let _ = builder
+                        .on_tray_icon_event(|tray, event| {
+                            if let tauri::tray::TrayIconEvent::Click {
+                                button: tauri::tray::MouseButton::Left,
+                                button_state: tauri::tray::MouseButtonState::Up,
+                                ..
+                            } = event {
+                                let app_handle = tray.app_handle();
+                                if let Some(w) = app_handle.get_webview_window("main") {
+                                    if let Ok(visible) = w.is_visible() {
+                                        if visible {
+                                            let _ = w.hide();
+                                        } else {
+                                            let _ = w.show();
+                                            let _ = w.set_focus();
+                                        }
                                     }
                                 }
                             }
-                        }
-                        "open_dashboard" | "context_dashboard" => {
-                            let handle = app_handle.clone();
-                            tauri::async_runtime::spawn(async move {
-                                  let _ = open_dashboard(handle).await;
-                            });
-                        }
-                        "open_settings" | "context_settings" => {
-                            let handle = app_handle.clone();
-                            tauri::async_runtime::spawn(async move {
-                                  let _ = open_settings(handle).await;
-                            });
-                        }
-                        "context_hide" => {
-                            if let Some(w) = app_handle.get_webview_window("main") {
-                                let _ = w.hide();
+                        })
+                        .on_menu_event(|app_handle, event| {
+                            match event.id.as_ref() {
+                                "toggle_widget" => {
+                                    if let Some(w) = app_handle.get_webview_window("main") {
+                                        if let Ok(visible) = w.is_visible() {
+                                            if visible {
+                                                let _ = w.hide();
+                                            } else {
+                                                let _ = w.show();
+                                                let _ = w.set_focus();
+                                            }
+                                        }
+                                    }
+                                }
+                                "open_dashboard" | "context_dashboard" => {
+                                    let handle = app_handle.clone();
+                                    tauri::async_runtime::spawn(async move {
+                                        let _ = open_dashboard(handle).await;
+                                    });
+                                }
+                                "open_settings" | "context_settings" => {
+                                    let handle = app_handle.clone();
+                                    tauri::async_runtime::spawn(async move {
+                                        let _ = open_settings(handle).await;
+                                    });
+                                }
+                                "context_hide" => {
+                                    if let Some(w) = app_handle.get_webview_window("main") {
+                                        let _ = w.hide();
+                                    }
+                                }
+                                "quit" | "context_close" => {
+                                    app_handle.exit(0);
+                                }
+                                _ => {}
                             }
-                        }
-                        "quit" | "context_close" => {
-                            app_handle.exit(0);
-                        }
-                        _ => {}
-                    }
-                })
-                .build(app).unwrap();
+                        })
+                        .build(app);
+                }
+            }
 
             Ok(())
         })

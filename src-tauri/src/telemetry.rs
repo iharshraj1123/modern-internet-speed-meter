@@ -816,12 +816,13 @@ fn get_battery_info() -> (u8, bool) {
 /// Measure TCP round-trip time to 1.1.1.1:80 (Cloudflare). Returns 0 on failure.
 fn measure_ping() -> u32 {
     let start = Instant::now();
-    match TcpStream::connect_timeout(
-        &"1.1.1.1:80".parse().unwrap(),
-        Duration::from_secs(3),
-    ) {
-        Ok(_) => start.elapsed().as_millis() as u32,
-        Err(_) => 0,
+    if let Ok(addr) = "1.1.1.1:80".parse() {
+        match TcpStream::connect_timeout(&addr, Duration::from_secs(3)) {
+            Ok(_) => start.elapsed().as_millis() as u32,
+            Err(_) => 0,
+        }
+    } else {
+        0
     }
 }
 

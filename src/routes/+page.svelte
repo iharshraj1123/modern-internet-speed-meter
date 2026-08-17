@@ -143,7 +143,9 @@
       try {
         const isElevated = await invoke("is_process_elevated");
         if (!isElevated) {
-          await invoke("restart_as_admin");
+          await invoke("restart_as_admin").catch((err) => {
+            console.warn("Startup admin elevation bypassed or declined, continuing safely:", err);
+          });
         }
       } catch (err) {
         console.warn("Startup admin elevation prompt bypassed or cancelled", err);
