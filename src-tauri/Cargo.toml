@@ -1,6 +1,6 @@
 [package]
 name = "internet-speed-meter"
-version = "1.2.5"
+version = "1.2.6"
 description = "Internet Speed Meter"
 authors = ["Harsh"]
 edition = "2021"
@@ -52,10 +52,12 @@ features = [
 ]
 
 [profile.release]
-opt-level = "z"
-lto = true
-codegen-units = 1
+opt-level = "s"
+lto = "thin"
+codegen-units = 16
 panic = "abort"
-strip = true
+strip = false
+debug = 1
+
 
 

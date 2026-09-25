@@ -104,13 +104,19 @@ fn calculate_trimmed_mean(mut samples: Vec<u64>) -> u64 {
     let drop_bottom = (len as f32 * 0.20) as usize;
     let drop_top = (len as f32 * 0.15) as usize;
 
-    let valid_slice = &samples[drop_bottom..(len - drop_top)];
+    let start = drop_bottom;
+    let end = len.saturating_sub(drop_top);
+    if start >= end || end > len {
+        return samples[len / 2];
+    }
+
+    let valid_slice = &samples[start..end];
     if valid_slice.is_empty() {
-        return samples[samples.len() / 2];
+        return samples[len / 2];
     }
 
     let sum: u64 = valid_slice.iter().sum();
-    sum / valid_slice.len() as u64
+    sum / (valid_slice.len() as u64).max(1)
 }
 
 // Parallel Download Speed Test with Exponential Moving Average (EMA) smoothing

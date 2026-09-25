@@ -395,14 +395,15 @@ const EVENT_TRACE_SYSTEM_LOGGER_MODE: u32 = 0x02000000;
 /// Create a fresh EVENT_TRACE_PROPERTIES buffer for StartTraceW.
 /// MUST be called before every StartTraceW because ControlTraceW mutates
 /// the buffer, corrupting fields like BufferSize, LogFileMode, FlushTimer.
-unsafe fn create_etw_props() -> (Vec<u8>, Vec<u16>) {
+unsafe fn create_etw_props() -> (Vec<u64>, Vec<u16>) {
     let session_name_raw = format!("{}\0", ETW_SESSION_NAME);
     let session_name_w: Vec<u16> = session_name_raw.encode_utf16().collect();
 
     let header_size = std::mem::size_of::<EVENT_TRACE_PROPERTIES>();
     let name_bytes_len = session_name_w.len() * 2;
     let props_size = header_size + name_bytes_len + 256;
-    let mut buffer = vec![0u8; props_size];
+    let u64_count = (props_size + 7) / 8;
+    let mut buffer = vec![0u64; u64_count];
     let props = buffer.as_mut_ptr() as *mut EVENT_TRACE_PROPERTIES;
 
     (*props).Wnode.BufferSize = props_size as u32;
@@ -414,7 +415,7 @@ unsafe fn create_etw_props() -> (Vec<u8>, Vec<u16>) {
     // Copy UTF-16 session name into buffer after the header
     std::ptr::copy_nonoverlapping(
         session_name_w.as_ptr() as *const u8,
-        buffer.as_mut_ptr().add(header_size),
+        (buffer.as_mut_ptr() as *mut u8).add(header_size),
         name_bytes_len,
     );
 
@@ -425,7 +426,8 @@ unsafe fn create_etw_props() -> (Vec<u8>, Vec<u16>) {
 unsafe fn stop_named_session(name_w: &[u16]) {
     let header_size = std::mem::size_of::<EVENT_TRACE_PROPERTIES>();
     let props_size = header_size + name_w.len() * 2 + 256;
-    let mut buf = vec![0u8; props_size];
+    let u64_count = (props_size + 7) / 8;
+    let mut buf = vec![0u64; u64_count];
     let props = buf.as_mut_ptr() as *mut EVENT_TRACE_PROPERTIES;
     (*props).Wnode.BufferSize = props_size as u32;
     (*props).LoggerNameOffset = header_size as u32;
@@ -442,8 +444,9 @@ unsafe fn cleanup_stale_ism_sessions() {
     let max_sessions = 64usize;
     let header_size = std::mem::size_of::<EVENT_TRACE_PROPERTIES>();
     let single_buf_size = header_size + 1024;
-    let mut buffers: Vec<Vec<u8>> = (0..max_sessions)
-        .map(|_| vec![0u8; single_buf_size])
+    let u64_count = (single_buf_size + 7) / 8;
+    let mut buffers: Vec<Vec<u64>> = (0..max_sessions)
+        .map(|_| vec![0u64; u64_count])
         .collect();
     let mut ptrs: Vec<*mut EVENT_TRACE_PROPERTIES> = buffers
         .iter_mut()
@@ -462,15 +465,23 @@ unsafe fn cleanup_stale_ism_sessions() {
         return;
     }
 
-    for i in 0..session_count as usize {
+    let limit = (session_count as usize).min(buffers.len());
+    for i in 0..limit {
         let buf = &buffers[i];
+        let buf_bytes = std::slice::from_raw_parts(buf.as_ptr() as *const u8, buf.len() * 8);
         let name_offset = (*ptrs[i]).LoggerNameOffset as usize;
-        let name_slice = &buf[name_offset..];
+        if name_offset == 0 || name_offset >= buf_bytes.len() {
+            continue;
+        }
+        let name_slice = &buf_bytes[name_offset..];
         let name_u16: Vec<u16> = name_slice
             .chunks_exact(2)
             .map(|c| u16::from_ne_bytes([c[0], c[1]]))
             .take_while(|&c| c != 0)
             .collect();
+        if name_u16.is_empty() {
+            continue;
+        }
         let session_name = String::from_utf16_lossy(&name_u16);
 
         // Stop any session starting with "ISM_" — covers both old PID-based
@@ -613,7 +624,7 @@ unsafe extern "system" fn etw_event_callback(event_record: *mut EVENT_RECORD) {
     // In Windows Kernel Network ETW events, incoming packet events fire in DPC interrupt context,
     // so record.EventHeader.ProcessId is 0 or 4 (System/Idle).
     // The actual socket-owning process ID is stored in the first 4 bytes of the UserData payload!
-    let mut pid = u32::from_ne_bytes(*(user_data as *const [u8; 4]));
+    let mut pid = u32::from_ne_bytes(std::ptr::read_unaligned(user_data as *const [u8; 4]));
     if pid == 0 {
         pid = record.EventHeader.ProcessId;
     }
@@ -622,7 +633,7 @@ unsafe extern "system" fn etw_event_callback(event_record: *mut EVENT_RECORD) {
     }
 
     // Extract packet transfer byte size from offset 4 (4 bytes) or fallback to UserDataLength
-    let packet_bytes = u32::from_ne_bytes(*(user_data.add(4) as *const [u8; 4])) as u64;
+    let packet_bytes = u32::from_ne_bytes(std::ptr::read_unaligned(user_data.add(4) as *const [u8; 4])) as u64;
     let bytes = if packet_bytes > 0 && packet_bytes <= 65535 {
         packet_bytes
     } else {
@@ -768,7 +779,7 @@ fn get_total_network_octets() -> (u64, u64) {
         }
 
         let mut table: *mut MIB_IF_TABLE2 = std::ptr::null_mut();
-        if GetIfTable2(&mut table).is_ok() {
+        if GetIfTable2(&mut table).is_ok() && !table.is_null() {
             let slice = std::slice::from_raw_parts(
                 (*table).Table.as_ptr(),
                 (*table).NumEntries as usize,
@@ -876,7 +887,9 @@ fn snapshot_tcp_connections(
 
         // Second call — with retry on ERROR_INSUFFICIENT_BUFFER (new connections
         // may have appeared since the first call updated buf_size).
+        let mut retry_count = 0;
         let fill_err = loop {
+            retry_count += 1;
             let err = GetExtendedTcpTable(
                 Some(buf.as_mut_ptr() as *mut c_void),
                 &mut buf_size,
@@ -885,8 +898,8 @@ fn snapshot_tcp_connections(
                 TCP_TABLE_OWNER_PID_CONNECTIONS,
                 0,
             );
-            if err == ERROR_INSUFFICIENT_BUFFER {
-                buf.resize(buf_size as usize + 512, 0);
+            if err == ERROR_INSUFFICIENT_BUFFER && retry_count < 5 {
+                buf.resize(buf_size as usize + 1024, 0);
             } else {
                 break err;
             }
@@ -903,6 +916,11 @@ fn snapshot_tcp_connections(
         let num_entries = table.dwNumEntries as usize;
         if num_entries == 0 || num_entries > 65_536 {
             return snapshots; // Zero entries or suspicious count — bail
+        }
+
+        let required_bytes = std::mem::size_of::<u32>() + num_entries * std::mem::size_of::<MIB_TCPROW_OWNER_PID>();
+        if buf.len() < required_bytes {
+            return snapshots; // Partial buffer guard
         }
 
         let rows: &[MIB_TCPROW_OWNER_PID] = std::slice::from_raw_parts(

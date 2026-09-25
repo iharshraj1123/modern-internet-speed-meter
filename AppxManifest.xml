@@ -1,0 +1,37 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10" xmlns:uap5="http://schemas.microsoft.com/appx/manifest/uap/windows10/5" xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10" xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10" xmlns:desktop7="http://schemas.microsoft.com/appx/manifest/desktop/windows10/7" xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities" IgnorableNamespaces="uap uap10 desktop7 rescap uap5">
+  <!--Package created by MSIX Packaging Tool version: 1.2024.405.0-->
+  <Identity Name="harsh.Internetspeedmetermodern" Publisher="CN=5D6AEF7A-42DB-4202-BA97-C72A0F15CA24" Version="1.2.6.0" ProcessorArchitecture="x64" />
+  <Properties>
+    <DisplayName>Internet Speed Meter Modern</DisplayName>
+    <PublisherDisplayName>harsh :)</PublisherDisplayName>
+    <Description>Internet Speed Meter</Description>
+    <Logo>Assets\StoreLogo.png</Logo>
+    <uap10:PackageIntegrity>
+      <uap10:Content Enforcement="on" />
+    </uap10:PackageIntegrity>
+  </Properties>
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.22000.1" />
+    <PackageDependency Name="Microsoft.WindowsAppRuntime.1.4" MinVersion="4000.1010.1349.0" Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US" />
+  </Dependencies>
+  <Applications>
+    <Application Id="INTERNETSPEEDMETER" Executable="VFS\Local AppData\Internet Speed Meter\internet-speed-meter.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements BackgroundColor="transparent" DisplayName="Internet Speed Meter" Square150x150Logo="Assets\INTERNETSPEEDMETER-Square150x150Logo.png" Square44x44Logo="Assets\INTERNETSPEEDMETER-Square44x44Logo.png" Description="Internet Speed Meter">
+        <uap:DefaultTile Wide310x150Logo="Assets\INTERNETSPEEDMETER-Wide310x150Logo.png" Square310x310Logo="Assets\INTERNETSPEEDMETER-Square310x310Logo.png" Square71x71Logo="Assets\INTERNETSPEEDMETER-Square71x71Logo.png" />
+      </uap:VisualElements>
+      <Extensions>
+        <desktop7:Extension Category="windows.shortcut">
+          <desktop7:Shortcut File="[{Programs}]\Internet Speed Meter.lnk" Icon="[{Package}]\VFS\Local AppData\Internet Speed Meter\internet-speed-meter.exe" />
+        </desktop7:Extension>
+        <uap5:Extension Category="windows.startupTask">
+          <uap5:StartupTask TaskId="InternetSpeedMeterStartup" Enabled="true" DisplayName="Internet Speed Meter" />
+        </uap5:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+  
+<Capabilities><rescap:Capability Name="runFullTrust" /></Capabilities></Package>

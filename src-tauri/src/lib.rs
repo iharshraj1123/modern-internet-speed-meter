@@ -28,6 +28,75 @@ static LATEST_STATS: Lazy<Mutex<telemetry::RealtimeStats>> = Lazy::new(|| {
 static ALERTED_THRESHOLDS: Lazy<Mutex<std::collections::HashSet<String>>> =
     Lazy::new(|| Mutex::new(std::collections::HashSet::new()));
 
+fn get_db_path() -> String {
+    DB_PATH.lock().map(|p| p.clone()).unwrap_or_else(|e| e.into_inner().clone())
+}
+
+fn with_alerted_thresholds<F, R>(f: F) -> R
+where
+    F: FnOnce(&mut std::collections::HashSet<String>) -> R,
+{
+    match ALERTED_THRESHOLDS.lock() {
+        Ok(mut guard) => f(&mut guard),
+        Err(poisoned) => f(&mut poisoned.into_inner()),
+    }
+}
+
+fn get_crash_log_path() -> std::path::PathBuf {
+    if let Some(local_appdata) = std::env::var_os("LOCALAPPDATA") {
+        let dir = std::path::PathBuf::from(local_appdata).join("com.speedmeter.app");
+        let _ = std::fs::create_dir_all(&dir);
+        dir.join("crash.log")
+    } else {
+        std::path::PathBuf::from("crash.log")
+    }
+}
+
+fn setup_crash_handler() {
+    if std::env::var_os("RUST_BACKTRACE").is_none() {
+        std::env::set_var("RUST_BACKTRACE", "1");
+    }
+
+    std::panic::set_hook(Box::new(|panic_info| {
+        let now = chrono::Local::now().to_rfc3339();
+        let location = panic_info
+            .location()
+            .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+            .unwrap_or_else(|| "unknown location".to_string());
+
+        let payload = if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
+            s.to_string()
+        } else if let Some(s) = panic_info.payload().downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "unknown panic payload".to_string()
+        };
+
+        let backtrace = std::backtrace::Backtrace::capture();
+        let report = format!(
+            "\n==================== CRASH REPORT ====================\n\
+            Timestamp: {}\n\
+            Location: {}\n\
+            Message: {}\n\
+            Backtrace:\n{}\n\
+            ======================================================\n",
+            now, location, payload, backtrace
+        );
+
+        eprintln!("{}", report);
+
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(get_crash_log_path())
+        {
+            use std::io::Write;
+            let _ = file.write_all(report.as_bytes());
+            let _ = file.flush();
+        }
+    }));
+}
+
 // Tauri command: Get current real-time stats
 #[tauri::command]
 fn get_realtime_stats() -> telemetry::RealtimeStats {
@@ -73,7 +142,7 @@ fn get_telemetry_debug_info() -> telemetry::TelemetryDebugInfo {
 // Tauri command: Get historical telemetry metrics (hourly, daily, weekly, monthly, yearly)
 #[tauri::command]
 async fn get_historical_stats(period: String) -> Result<Vec<db::ProcessStat>, String> {
-    let path = DB_PATH.lock().unwrap().clone();
+    let path = get_db_path();
     if period == "clear" {
         if let Ok(conn) = db::open_conn(&path) {
             let _ = conn.execute("DELETE FROM process_telemetry", []);
@@ -88,7 +157,7 @@ async fn get_historical_stats(period: String) -> Result<Vec<db::ProcessStat>, St
 
 #[tauri::command]
 async fn get_available_months() -> Result<Vec<String>, String> {
-    let path = DB_PATH.lock().unwrap().clone();
+    let path = get_db_path();
     let conn = db::open_conn(&path).map_err(|e| e.to_string())?;
     db::get_available_months(&conn).map_err(|e| e.to_string())
 }
@@ -207,7 +276,7 @@ async fn show_context_menu(app: AppHandle) -> Result<(), String> {
 // Tauri command: Get database info (size, row counts, retention settings)
 #[tauri::command]
 async fn get_db_info() -> Result<db::DbInfo, String> {
-    let path = DB_PATH.lock().unwrap().clone();
+    let path = get_db_path();
     let conn = db::open_conn(&path).map_err(|e| e.to_string())?;
     db::get_db_info(&conn, &path).map_err(|e| e.to_string())
 }
@@ -215,7 +284,7 @@ async fn get_db_info() -> Result<db::DbInfo, String> {
 // Tauri command: Update retention policy
 #[tauri::command]
 async fn set_retention_policy(raw_days: i64, hourly_days: i64) -> Result<(), String> {
-    let path = DB_PATH.lock().unwrap().clone();
+    let path = get_db_path();
     let conn = db::open_conn(&path).map_err(|e| e.to_string())?;
     db::set_retention_policy(&conn, raw_days, hourly_days).map_err(|e| e.to_string())
 }
@@ -223,7 +292,7 @@ async fn set_retention_policy(raw_days: i64, hourly_days: i64) -> Result<(), Str
 // Tauri command: Vacuum / optimize the database
 #[tauri::command]
 async fn vacuum_db() -> Result<(), String> {
-    let path = DB_PATH.lock().unwrap().clone();
+    let path = get_db_path();
     let conn = db::open_conn(&path).map_err(|e| e.to_string())?;
     db::vacuum_db(&conn).map_err(|e| e.to_string())
 }
@@ -231,7 +300,7 @@ async fn vacuum_db() -> Result<(), String> {
 // Tauri command: Get today's total bandwidth usage in bytes
 #[tauri::command]
 async fn get_today_usage() -> Result<(u64, u64), String> {
-    let path = DB_PATH.lock().unwrap().clone();
+    let path = get_db_path();
     let conn = db::open_conn(&path).map_err(|e| e.to_string())?;
     db::get_today_total_bytes(&conn).map_err(|e| e.to_string())
 }
@@ -239,7 +308,7 @@ async fn get_today_usage() -> Result<(u64, u64), String> {
 // Tauri command: Get this month's total bandwidth usage in bytes
 #[tauri::command]
 async fn get_month_usage() -> Result<(u64, u64), String> {
-    let path = DB_PATH.lock().unwrap().clone();
+    let path = get_db_path();
     let conn = db::open_conn(&path).map_err(|e| e.to_string())?;
     db::get_month_total_bytes(&conn).map_err(|e| e.to_string())
 }
@@ -251,7 +320,7 @@ async fn check_data_limits(
     daily_limit_bytes: u64,
     monthly_limit_bytes: u64,
 ) -> Result<(), String> {
-    let path = DB_PATH.lock().unwrap().clone();
+    let path = get_db_path();
     let conn = db::open_conn(&path).map_err(|e| e.to_string())?;
 
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
@@ -263,8 +332,9 @@ async fn check_data_limits(
 
         for threshold in [100u64, 80] {
             let key = format!("daily_{}_{}", threshold, today);
-            if pct >= threshold && !ALERTED_THRESHOLDS.lock().unwrap().contains(&key) {
-                ALERTED_THRESHOLDS.lock().unwrap().insert(key);
+            let already_alerted = with_alerted_thresholds(|set| set.contains(&key));
+            if pct >= threshold && !already_alerted {
+                with_alerted_thresholds(|set| { set.insert(key); });
                 let msg = if threshold == 100 {
                     "You have reached your daily data limit.".to_string()
                 } else {
@@ -288,8 +358,9 @@ async fn check_data_limits(
 
         for threshold in [100u64, 80] {
             let key = format!("monthly_{}_{}", threshold, month);
-            if pct >= threshold && !ALERTED_THRESHOLDS.lock().unwrap().contains(&key) {
-                ALERTED_THRESHOLDS.lock().unwrap().insert(key);
+            let already_alerted = with_alerted_thresholds(|set| set.contains(&key));
+            if pct >= threshold && !already_alerted {
+                with_alerted_thresholds(|set| { set.insert(key); });
                 let msg = if threshold == 100 {
                     "You have reached your monthly data limit.".to_string()
                 } else {
@@ -344,7 +415,7 @@ async fn unregister_hotkey(app: AppHandle) -> Result<(), String> {
 // Tauri command: Save setting key-value pair to SQLite DB
 #[tauri::command]
 async fn save_app_setting(key: String, value: String) -> Result<(), String> {
-    let path = DB_PATH.lock().unwrap().clone();
+    let path = get_db_path();
     let conn = db::open_conn(&path).map_err(|e| e.to_string())?;
     db::save_setting(&conn, &key, &value).map_err(|e| e.to_string())
 }
@@ -352,7 +423,7 @@ async fn save_app_setting(key: String, value: String) -> Result<(), String> {
 // Tauri command: Get individual setting from SQLite DB
 #[tauri::command]
 async fn get_app_setting(key: String) -> Result<Option<String>, String> {
-    let path = DB_PATH.lock().unwrap().clone();
+    let path = get_db_path();
     let conn = db::open_conn(&path).map_err(|e| e.to_string())?;
     db::get_setting(&conn, &key).map_err(|e| e.to_string())
 }
@@ -360,7 +431,7 @@ async fn get_app_setting(key: String) -> Result<Option<String>, String> {
 // Tauri command: Get all settings key-value pairs from SQLite DB
 #[tauri::command]
 async fn get_all_app_settings() -> Result<std::collections::HashMap<String, String>, String> {
-    let path = DB_PATH.lock().unwrap().clone();
+    let path = get_db_path();
     let conn = db::open_conn(&path).map_err(|e| e.to_string())?;
     db::get_all_settings(&conn).map_err(|e| e.to_string())
 }
@@ -368,6 +439,8 @@ async fn get_all_app_settings() -> Result<std::collections::HashMap<String, Stri
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    setup_crash_handler();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_autostart::init(
@@ -591,5 +664,21 @@ pub fn run() {
             get_all_app_settings,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .unwrap_or_else(|e| {
+            let msg = format!("Fatal error while running tauri application: {}", e);
+            eprintln!("{}", msg);
+            if let Ok(mut file) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(get_crash_log_path())
+            {
+                use std::io::Write;
+                let _ = writeln!(
+                    file,
+                    "[{}] Fatal Tauri launch error: {}",
+                    chrono::Local::now().to_rfc3339(),
+                    e
+                );
+            }
+        });
 }
