@@ -1,9 +1,11 @@
 <script>
   import { onMount, onDestroy } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { getVersion } from "@tauri-apps/api/app";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { settings, ACCENT_COLORS, formatSpeed } from "../../lib/settingsStore";
 
+  let appVersion = $state("1.2.6");
   let activeTab = $state("general");
   let appearanceSubTab = $state("theme"); // 'theme' or 'graph'
   let autostartEnabled = $state(false);
@@ -155,6 +157,11 @@
   }
 
   onMount(async () => {
+    try {
+      appVersion = await getVersion();
+    } catch (e) {
+      console.error("Failed to query app version", e);
+    }
     try {
       await settings.loadFromDb();
     } catch (e) {
@@ -1115,7 +1122,7 @@
 
           <div class="app-version-info">
             <span class="version-label">Internet Speed Meter</span>
-            <span class="version-number">Version 1.2.5</span>
+            <span class="version-number">Version {appVersion}</span>
             <span class="version-copy">Made with care for everyone</span>
           </div>
         </section>

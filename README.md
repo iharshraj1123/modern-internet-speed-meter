@@ -1,6 +1,6 @@
 # Internet Speed Meter & Telemetry Dashboard
 
-[![Latest Release](https://img.shields.io/github/v/release/iharshraj1123/modern-internet-speed-meter?color=10b981&label=Release&style=flat-square)](https://github.com/iharshraj1123/modern-internet-speed-meter/releases/tag/v1.2.5)
+[![Latest Release](https://img.shields.io/github/v/release/iharshraj1123/modern-internet-speed-meter?color=10b981&label=Release&style=flat-square)](https://github.com/iharshraj1123/modern-internet-speed-meter/releases/tag/v1.2.6)
 [![License](https://img.shields.io/badge/License-NC--SA%20%2B%20Attribution-violet?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20x64-sky?style=flat-square)](https://github.com/iharshraj1123/modern-internet-speed-meter/releases)
 
@@ -40,13 +40,13 @@ A glassmorphic desktop widget and network telemetry dashboard built with Tauri v
 
 ## Download & Installation
 
-Windows installers for Version 1.1.0 can be downloaded from the GitHub Releases page:
+Windows installers for Version 1.2.6 can be downloaded from the GitHub Releases page:
 
-**[Download Version 1.2.5 Release](https://github.com/iharshraj1123/modern-internet-speed-meter/releases/tag/v1.2.5)**
+**[Download Version 1.2.6 Release](https://github.com/iharshraj1123/modern-internet-speed-meter/releases/tag/v1.2.6)**
 
 Available formats:
-- `Internet Speed Meter_1.1.0_x64-setup.exe` (Windows NSIS Setup Installer)
-- `Internet Speed Meter_1.1.0_x64_en-US.msi` (Windows MSI Installer)
+- `Internet Speed Meter_1.2.6_x64-setup.exe` (Windows NSIS Setup Installer)
+- `Internet Speed Meter_1.2.6_x64_en-US.msi` (Windows MSI Installer)
 
 ---
 
